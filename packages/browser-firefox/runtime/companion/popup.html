@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Zamery Browser Firefox</title>
+<style>
+body{font:13px system-ui,sans-serif;min-width:320px;margin:14px}button{margin-right:8px;padding:6px 10px}code{font-size:11px;word-break:break-all}#state{font-weight:600;margin-bottom:8px}.muted{opacity:.7}.error{color:#b00020}.row{margin:7px 0}
+</style>
+</head>
+<body>
+<div id="state">Loading…</div>
+<div id="protocol" class="row muted">Protocol: —</div>
+<div class="muted">Grant is bound to the current native-host session and expires after 24 hours at most.</div>
+<p><code id="session">—</code></p>
+<div id="expiry" class="row muted"></div>
+<div id="error" class="row error"></div>
+<button id="grant" type="button">Grant current session</button>
+<button id="revoke" type="button">Revoke</button>
+<script src="popup.js"></script>
+</body>
+</html>

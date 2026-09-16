@@ -1,0 +1,45 @@
+{
+  "name": "@zamery/pi-browser",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Generic typed Pi browser tools backed by a BrowserProvider implementation.",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.19.0 <25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maemreyo/zamery-browser.git",
+    "directory": "packages/pi-browser"
+  },
+  "homepage": "https://github.com/maemreyo/zamery-browser/tree/main/packages/pi-browser#readme",
+  "bugs": {
+    "url": "https://github.com/maemreyo/zamery-browser/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "pnpm --filter @zamery/browser-provider build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@zamery/browser-provider": "workspace:*",
+    "typebox": "1.3.7"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
+}

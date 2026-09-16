@@ -1,0 +1,37 @@
+{
+  "name": "@zamery/browser-provider",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Provider-neutral BrowserProvider V1 and V2 contracts for live browser integrations.",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.19.0 <25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maemreyo/zamery-browser.git",
+    "directory": "packages/browser-provider"
+  },
+  "homepage": "https://github.com/maemreyo/zamery-browser/tree/main/packages/browser-provider#readme",
+  "bugs": {
+    "url": "https://github.com/maemreyo/zamery-browser/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
+}
