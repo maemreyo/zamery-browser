@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a reproducible defect in Zamery Browser.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. For suspected security vulnerabilities, stop here and use the private reporting path in SECURITY.md instead.
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      options:
+        - "@zamery/browser-provider"
+        - "@zamery/pi-browser"
+        - "@zamery/browser-firefox"
+        - Multiple packages
+        - Unsure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      placeholder: "24.19.0"
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser/provider context
+      description: Include Firefox version or another provider implementation when relevant.
+      placeholder: "Firefox 156 / @zamery/browser-firefox"
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest safe sequence that reproduces the defect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Logs, exact action outcomes, or relevant documentation links. Remove secrets and browser credentials.

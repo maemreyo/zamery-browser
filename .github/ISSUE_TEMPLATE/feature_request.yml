@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a new capability or public API improvement.
+title: "feature: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the user or integration problem this should solve.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+      description: Describe the desired behavior without assuming a specific implementation when possible.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Likely public surface
+      options:
+        - BrowserProvider contract
+        - Pi browser tools
+        - Firefox provider
+        - Browser asset flow
+        - Documentation/examples
+        - Unsure or cross-cutting
+    validations:
+      required: true
+
+  - type: textarea
+    id: semantics
+    attributes:
+      label: Compatibility or security considerations
+      description: Note any effects on capability boundaries, freshness, action outcomes, browser ownership, or versioning.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
