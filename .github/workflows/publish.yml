@@ -1,0 +1,95 @@
+name: Publish npm packages
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish with npm trusted publishing
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Install release tooling
+        run: npm install --global npm@11.17.0 pnpm@10.20.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Validate release tag against package versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          node --input-type=module - "$version" <<'NODE'
+          import fs from "node:fs";
+
+          const expected = process.argv[2];
+          const files = [
+            "package.json",
+            "packages/browser-provider/package.json",
+            "packages/pi-browser/package.json",
+            "packages/browser-firefox/package.json",
+          ];
+
+          for (const file of files) {
+            const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
+            if (pkg.version !== expected) {
+              throw new Error(`${file}: expected version ${expected}, found ${pkg.version}`);
+            }
+          }
+          NODE
+
+      - name: Pack publishable tarballs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/zamery-pack"
+          pnpm --filter @zamery/browser-provider pack --pack-destination "$RUNNER_TEMP/zamery-pack"
+          pnpm --filter @zamery/pi-browser pack --pack-destination "$RUNNER_TEMP/zamery-pack"
+          pnpm --filter @zamery/browser-firefox pack --pack-destination "$RUNNER_TEMP/zamery-pack"
+          ls -lh "$RUNNER_TEMP/zamery-pack"
+
+      - name: Publish tarballs
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          publish_one() {
+            local pattern="$1"
+            local files=("$RUNNER_TEMP"/zamery-pack/$pattern)
+            if [[ ${#files[@]} -ne 1 ]]; then
+              echo "Expected exactly one tarball matching $pattern, found ${#files[@]}" >&2
+              exit 1
+            fi
+            npm publish "${files[0]}" --access public
+          }
+
+          publish_one 'zamery-browser-provider-*.tgz'
+          publish_one 'zamery-pi-browser-*.tgz'
+          publish_one 'zamery-browser-firefox-*.tgz'
