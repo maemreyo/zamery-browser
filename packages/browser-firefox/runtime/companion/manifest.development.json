@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion (Development)",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Development identity for the Zamery browser companion canary.",
   "browser_specific_settings": {
     "gecko": {
@@ -33,7 +33,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["asset-discovery-v1.js", "asset-transfer-v1.js", "asset-a1-experimental.js", "content.js"],
       "all_frames": true,
       "run_at": "document_start"
     }

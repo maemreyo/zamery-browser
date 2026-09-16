@@ -11,6 +11,14 @@
     }
   })();
   const documentId = browserDocumentId || contentDocumentId;
+  const assetRuntime = globalThis.ZameryAssetA1Experimental?.createContentAssetRuntime?.({ documentId }) || null;
+  const assetDiscoveryRuntime = globalThis.ZameryAssetDiscoveryV1?.createDiscoveryRuntime?.({
+    documentId,
+    nodeIdForElement: nodeIdFor,
+  }) || null;
+  const assetTransferRuntime = assetDiscoveryRuntime
+    ? globalThis.ZameryAssetTransferV1?.createTransferRuntime?.({ discoveryRuntime: assetDiscoveryRuntime }) || null
+    : null;
   const nodeIds = new WeakMap();
   const nodes = new Map();
   let nextNodeId = 1;
@@ -219,10 +227,122 @@
     return { error: { code: "INVALID_ACTION", action: request.action } };
   }
 
+  async function assetCall(run) {
+    if (!assetRuntime) {
+      return {
+        ok: false,
+        error: {
+          code: "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE",
+          message: "A1 browser asset experiment is unavailable in this companion",
+        },
+      };
+    }
+    try {
+      return { ok: true, result: await run() };
+    } catch (error) {
+      return {
+        ok: false,
+        error: globalThis.ZameryAssetA1Experimental.normalizeAssetError(error),
+      };
+    }
+  }
+
+  async function discoveryCall(run) {
+    if (!assetDiscoveryRuntime) {
+      return {
+        ok: false,
+        error: {
+          code: "BROWSER_CONTEXT_GONE",
+          message: "browser asset discovery is unavailable in this document",
+        },
+      };
+    }
+    try {
+      return { ok: true, result: await run() };
+    } catch (error) {
+      return {
+        ok: false,
+        error: globalThis.ZameryAssetDiscoveryV1.normalizeAssetError(error),
+      };
+    }
+  }
+
+  async function transferCall(run) {
+    if (!assetTransferRuntime) {
+      return {
+        ok: false,
+        error: {
+          code: "BROWSER_ASSET_FETCH_FAILED",
+          message: "browser asset transfer is unavailable in this document",
+          reason: "asset_transfer_runtime_unavailable",
+        },
+      };
+    }
+    try {
+      return { ok: true, result: await run() };
+    } catch (error) {
+      return {
+        ok: false,
+        error: globalThis.ZameryAssetTransferV1.normalizeAssetError(error),
+      };
+    }
+  }
+
   browser.runtime.onMessage.addListener((message) => {
     if (!message || typeof message !== "object") return undefined;
     if (message.type === "zamery_browser_firefox_snapshot" || message.type === "zamery_v0c_snapshot") return Promise.resolve(snapshot());
     if (message.type === "zamery_browser_firefox_act" || message.type === "zamery_v0c_act") return Promise.resolve(act(message));
+    if (message.type === "zamery_browser_firefox_asset_discover_v1") {
+      return discoveryCall(() => assetDiscoveryRuntime.discoverAssets());
+    }
+    if (message.type === "zamery_browser_firefox_asset_open_v1") {
+      return transferCall(() => assetTransferRuntime.openAsset(message.asset_ref, {
+        expected_document_id: message.expected_document_id,
+        max_asset_bytes: message.max_asset_bytes,
+        request_id: message.request_id,
+      }));
+    }
+    if (message.type === "zamery_browser_firefox_asset_read_chunk_v1") {
+      return transferCall(() => assetTransferRuntime.readChunk(message.asset_handle, {
+        sequence: message.sequence,
+        offset: message.offset,
+        max_raw_bytes: message.max_raw_bytes,
+        request_id: message.request_id,
+      }));
+    }
+    if (message.type === "zamery_browser_firefox_asset_close_v1") {
+      return transferCall(() => assetTransferRuntime.closeAsset(message.asset_handle, message.reason));
+    }
+    if (message.type === "zamery_browser_firefox_asset_cancel_request_v1") {
+      return transferCall(() => assetTransferRuntime.cancelRequest(message.request_id));
+    }
+    if (message.type === "zamery_browser_firefox_asset_teardown_v1") {
+      return transferCall(() => assetTransferRuntime.closeAll());
+    }
+    if (message.type === "zamery_browser_firefox_a1_asset_discover") {
+      return assetCall(() => assetRuntime.discoverAssets());
+    }
+    if (message.type === "zamery_browser_firefox_a1_asset_open") {
+      return assetCall(() => assetRuntime.openAsset(message.asset_ref, {
+        expected_document_id: message.expected_document_id,
+        max_asset_bytes: message.max_asset_bytes,
+        request_id: message.request_id,
+      }));
+    }
+    if (message.type === "zamery_browser_firefox_a1_asset_read_chunk") {
+      return assetCall(() => assetRuntime.readChunk(message.asset_handle, {
+        sequence: message.sequence,
+        offset: message.offset,
+        max_raw_bytes: message.max_raw_bytes,
+        request_id: message.request_id,
+      }));
+    }
+    if (message.type === "zamery_browser_firefox_a1_asset_close") {
+      return assetCall(() => assetRuntime.closeAsset(message.asset_handle));
+    }
+    if (message.type === "zamery_browser_firefox_a1_asset_cancel_request") {
+      return assetCall(() => assetRuntime.cancelRequest(message.request_id));
+    }
     if (message.type === "zamery_browser_firefox_ping" || message.type === "zamery_v0c_ping") {
       return Promise.resolve({
         document_id: documentId,
@@ -232,6 +352,9 @@
         viewport_width: window.innerWidth,
         viewport_height: window.innerHeight,
         navigator_webdriver: navigator.webdriver,
+        asset_discovery_v1_ready: Boolean(assetDiscoveryRuntime),
+        asset_transfer_v1_ready: Boolean(assetTransferRuntime),
+        a1_asset_experiment_ready: Boolean(assetRuntime),
       });
     }
     return undefined;

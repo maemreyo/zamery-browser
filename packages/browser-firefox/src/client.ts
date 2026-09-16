@@ -3,6 +3,7 @@ import net from "node:net";
 
 import {
   DEFAULT_FIREFOX_BROKER_TIMEOUT_MS,
+  MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES,
   type FirefoxBrokerRequest,
   type FirefoxBrokerResponse,
   type FirefoxSessionReceipt,
@@ -31,11 +32,24 @@ function exchange(
     }, timeoutMs);
 
     const cleanup = () => clearTimeout(timer);
+    const rejectPrematureClose = (event: "ended" | "closed") => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error(`Firefox broker connection ${event} before a complete response frame`));
+    };
     socket.setEncoding("utf8");
     socket.on("connect", () => socket.write(`${JSON.stringify(request)}\n`));
     socket.on("data", (chunk) => {
       if (settled) return;
       buffer += chunk;
+      if (Buffer.byteLength(buffer, "utf8") > MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES) {
+        settled = true;
+        cleanup();
+        socket.destroy();
+        reject(new Error(`Firefox broker response exceeds ${MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES} bytes`));
+        return;
+      }
       const newline = buffer.indexOf("\n");
       if (newline < 0) return;
       settled = true;
@@ -47,6 +61,8 @@ function exchange(
         reject(error);
       }
     });
+    socket.on("end", () => rejectPrematureClose("ended"));
+    socket.on("close", () => rejectPrematureClose("closed"));
     socket.on("error", (error) => {
       if (settled) return;
       settled = true;

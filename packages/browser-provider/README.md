@@ -18,6 +18,7 @@ npm install @zamery/browser-provider
 - Declared vs observed action semantics.
 - Validated action receipts that preserve ambiguous outcomes instead of converting them into success.
 - Side-by-side V1/V2 contracts so protocol evolution is explicit.
+- Optional `BrowserAssetProviderV1` contracts for bounded, opaque browser-backed asset discovery and transfer without exposing source URLs or credentials.
 
 ## Example
 

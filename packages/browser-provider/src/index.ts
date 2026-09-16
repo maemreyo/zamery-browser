@@ -1,3 +1,5 @@
+export * from "./assets-v1.js";
+
 export const BROWSER_PROVIDER_V1 = 1 as const;
 
 export const BROWSER_PROVIDER_V1_CAPABILITIES = [

@@ -21,9 +21,10 @@ npm install @zamery/browser-firefox
 - `browser_status`
 - `browser_contexts`
 - `browser_snapshot`
+- `browser_assets`
 - `browser_act`
 
-The tools preserve provider capability and mutation semantics. An unknown or partial action outcome is not converted into success or blindly retried.
+The tools preserve provider capability and mutation semantics. `browser_assets` discovers opaque browser-backed media refs plus safe semantic metadata; it does not expose source URLs, cookies, authorization headers, or storage tokens. An unknown or partial action outcome is not converted into success or blindly retried.
 
 ## Configuration
 
@@ -57,7 +58,7 @@ Direct Pi hosts own cleanup through Pi's `session_shutdown` lifecycle. Hosts tha
 
 Advanced consumers can use `loadBrowserProviderV2Factory()` and `createBrowserProviderV2Binding()` with provider modules that export `createBrowserProviderV2(options)`.
 
-The stable four-tool Pi surface remains V1 until an explicit migration is designed and documented; V2 support is additive rather than a silent behavior change.
+The stable browser tool surface remains V1-based until an explicit migration is designed and documented; V2 support is additive rather than a silent behavior change. Asset discovery is a separate optional V1 capability rather than an implicit upgrade of every provider.
 
 ## Compatibility
 

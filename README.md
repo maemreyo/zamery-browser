@@ -16,8 +16,8 @@ Node.js `>=22.19.0 <25` is currently supported. `@zamery/pi-browser` is tested a
 
 | Package | Purpose |
 | --- | --- |
-| `@zamery/browser-provider` | Provider-neutral BrowserProvider V1/V2 contracts and validation helpers. |
-| `@zamery/pi-browser` | Typed Pi tools: browser status, contexts, semantic snapshots, and actions. |
+| `@zamery/browser-provider` | Provider-neutral BrowserProvider V1/V2 contracts, plus optional bounded browser-asset contracts. |
+| `@zamery/pi-browser` | Typed Pi tools for status, contexts, semantic snapshots, browser-backed assets, and actions. |
 | `@zamery/browser-firefox` | Firefox provider and Native Messaging host for an already-running Firefox session. |
 
 ## Architecture
@@ -52,7 +52,7 @@ try {
 }
 ```
 
-For Pi integrations, `@zamery/pi-browser` exposes four stable tools: `browser_status`, `browser_contexts`, `browser_snapshot`, and `browser_act`.
+For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_contexts`, `browser_snapshot`, `browser_assets`, and `browser_act`. `browser_assets` returns opaque refs and safe metadata rather than source URLs or browser credentials.
 
 ## Why this exists
 
@@ -63,6 +63,7 @@ Browser automation often hides important distinctions: whether the browser is us
 - Actions preserve exact `completed`, `not_started`, `partial`, or `unknown` outcomes instead of converting ambiguity into success.
 - Firefox actions are DOM-synthetic and are not represented as trusted OS input.
 - Provider teardown does not imply ownership of the user's browser or tabs.
+- Browser-backed asset discovery/transfer keeps sensitive source URLs and credentials provider-internal while exposing bounded opaque-ref workflows to consumers.
 
 ## Firefox companion
 

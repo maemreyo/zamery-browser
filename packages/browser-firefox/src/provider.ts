@@ -1,7 +1,22 @@
+import { createHash, type Hash } from "node:crypto";
+
 import {
+  BROWSER_ASSET_PROVIDER_V1,
+  BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES,
+  BROWSER_ASSET_PROVIDER_V1_REPLAY_WINDOW_CHUNKS,
   BROWSER_PROVIDER_V1,
   BROWSER_PROVIDER_V1_CAPABILITIES,
   type BrowserAction,
+  type BrowserAssetCloseRequest,
+  type BrowserAssetCloseResult,
+  type BrowserAssetContextCapabilities,
+  type BrowserAssetDiscovery,
+  type BrowserAssetDiscoveryRequest,
+  type BrowserAssetOpenRequest,
+  type BrowserAssetOpenResult,
+  type BrowserAssetProviderV1,
+  type BrowserAssetReadChunkRequest,
+  type BrowserAssetReadChunkResult,
   type BrowserActionCapabilityId,
   type BrowserContextCapabilities,
   type BrowserContextSummary,
@@ -94,6 +109,88 @@ interface RawSnapshotResult {
   nodes?: unknown;
 }
 
+interface RawAssetDiscoveryAsset {
+  asset_ref?: unknown;
+  media_kind?: unknown;
+  safe_label?: unknown;
+  document_order?: unknown;
+  rendered?: unknown;
+  intrinsic_width?: unknown;
+  intrinsic_height?: unknown;
+  representation?: { role?: unknown };
+  discovered_at?: unknown;
+  expires_at?: unknown;
+  element_ref?: unknown;
+  container_ref?: unknown;
+}
+
+interface RawAssetDiscoveryResult {
+  browser_instance_id?: unknown;
+  context_id?: unknown;
+  document_id?: unknown;
+  frame_identity?: unknown;
+  snapshot_id?: unknown;
+  assets?: unknown;
+}
+
+interface RawAssetAvailability {
+  state?: unknown;
+  reason?: unknown;
+}
+
+interface RawAssetCapabilitiesResult {
+  discover?: RawAssetAvailability;
+  read?: RawAssetAvailability;
+}
+
+interface RawAssetOpenResult {
+  transfer_id?: unknown;
+  asset_handle?: unknown;
+  mime_type?: unknown;
+  content_length?: unknown;
+  next_sequence?: unknown;
+  next_offset?: unknown;
+  max_raw_chunk_bytes?: unknown;
+  replay_window_chunks?: unknown;
+  representation_binding?: unknown;
+}
+
+interface RawAssetTerminal {
+  acquisition_bytes?: unknown;
+  acquisition_sha256?: unknown;
+}
+
+interface RawAssetChunkResult {
+  transfer_id?: unknown;
+  sequence?: unknown;
+  offset?: unknown;
+  raw_bytes?: unknown;
+  data_base64?: unknown;
+  eof?: unknown;
+  terminal?: RawAssetTerminal;
+}
+
+interface AssetTransferTracker {
+  browserInstanceId: string;
+  contextId: string;
+  transferId: string;
+  nextSequence: number;
+  nextOffset: number;
+  bytes: number;
+  hash: Hash;
+  terminal: boolean;
+  last?: {
+    sequence: number;
+    offset: number;
+    rawBytes: number;
+    dataBase64: string;
+    eof: boolean;
+    terminalBytes?: number;
+    terminalSha256?: string;
+    mapped: BrowserAssetReadChunkResult;
+  };
+}
+
 interface RawMutationResult {
   outcome?: unknown;
   result?: {
@@ -127,6 +224,49 @@ function nullableString(value: unknown): string | null {
 
 function nullableNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function assetErrorFromResponse(response: FirefoxBrokerResponse): Error {
+  const message = response.error?.message || "Firefox asset provider request failed";
+  return Object.assign(new Error(message), {
+    code: response.error?.code || "BROWSER_ASSET_FETCH_FAILED",
+    ...(response.error?.reason ? { reason: response.error.reason } : {}),
+  });
+}
+
+function assertAssetOk(response: FirefoxBrokerResponse): unknown {
+  if (!response.ok) throw assetErrorFromResponse(response);
+  return response.result;
+}
+
+function assetMediaKind(value: unknown): "image" | "audio" | "video" {
+  if (value === "image" || value === "audio" || value === "video") return value;
+  throw Object.assign(new Error("Firefox asset discovery returned an invalid media kind"), {
+    code: "BROWSER_ASSET_FETCH_FAILED",
+    reason: "invalid_discovery_media_kind",
+  });
+}
+
+function assetRepresentationRole(value: unknown): "original" | "preview" | "thumbnail" | "unknown" {
+  if (value === "original" || value === "preview" || value === "thumbnail") return value;
+  return "unknown";
+}
+
+function assetAvailability(raw: RawAssetAvailability | undefined): { state: "ready" } | { state: "unsupported" | "unavailable"; reason: string } {
+  if (raw?.state === "ready") return { state: "ready" };
+  if (raw?.state === "unsupported") return { state: "unsupported", reason: stringOrEmpty(raw.reason) || "unsupported" };
+  return { state: "unavailable", reason: stringOrEmpty(raw?.reason) || "unavailable" };
+}
+
+function assetProtocolError(reason: string, message = "Firefox asset transfer protocol validation failed"): Error {
+  return Object.assign(new Error(message), {
+    code: "BROWSER_ASSET_TRANSFER_PROTOCOL",
+    reason,
+  });
+}
+
+function nonNegativeSafeInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function errorCode(value: unknown): BrowserProviderErrorCode {
@@ -215,11 +355,13 @@ function mapContext(raw: RawContext, browserInstanceId: string): BrowserContextS
   };
 }
 
-export class FirefoxBrowserProvider implements BrowserProvider {
+export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProviderV1 {
   readonly protocolVersion = BROWSER_PROVIDER_V1;
+  readonly assetProtocolVersion = BROWSER_ASSET_PROVIDER_V1;
   readonly #browserInstanceId: string | undefined;
   readonly #sessionMaxAgeMs: number | undefined;
   readonly #sessionsDir: string | undefined;
+  readonly #assetTransfers = new Map<string, AssetTransferTracker>();
 
   constructor(options: FirefoxBrowserProviderOptions = {}) {
     this.#browserInstanceId = options.browserInstanceId;
@@ -244,6 +386,34 @@ export class FirefoxBrowserProvider implements BrowserProvider {
     if (!requested) return selectFirefoxSession(sessions);
     const matching = sessions.filter((session) => session.browser_instance_id === requested);
     return selectFirefoxSession(matching);
+  }
+
+  async #closeAssetHandleBestEffort(
+    assetHandle: string,
+    tracker: AssetTransferTracker,
+    reason: BrowserAssetCloseRequest["reason"] = "consumer_error",
+  ): Promise<void> {
+    this.#assetTransfers.delete(assetHandle);
+    try {
+      const session = this.#sessionFor(tracker.browserInstanceId);
+      await sendFirefoxBrokerRequest(
+        session,
+        "asset_close_v1",
+        { asset_handle: assetHandle, reason },
+        {},
+      );
+    } catch {
+      // Best-effort cleanup after a protocol failure. The browser-side handle is also TTL-bound.
+    }
+  }
+
+  async #failAssetTransfer(
+    assetHandle: string,
+    tracker: AssetTransferTracker,
+    reason: string,
+  ): Promise<never> {
+    await this.#closeAssetHandleBestEffort(assetHandle, tracker, "consumer_error");
+    throw assetProtocolError(reason);
   }
 
   async status(options: BrowserOperationOptions = {}): Promise<BrowserProviderStatus> {
@@ -284,6 +454,296 @@ export class FirefoxBrowserProvider implements BrowserProvider {
     const browserInstanceId = stringOrEmpty(raw.browser_instance_id) || request.browserInstanceId;
     const contexts = Array.isArray(raw.contexts) ? raw.contexts as RawContext[] : [];
     return contexts.map((context) => mapContext(context, browserInstanceId));
+  }
+
+  async assetCapabilities(
+    request: { browserInstanceId: string; contextId: string },
+    options: BrowserOperationOptions = {},
+  ): Promise<BrowserAssetContextCapabilities> {
+    const session = this.#sessionFor(request.browserInstanceId);
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "asset_capabilities_v1",
+      { context_id: request.contextId },
+      brokerOptions(options),
+    );
+    const raw = assertAssetOk(response) as RawAssetCapabilitiesResult;
+    return {
+      protocolVersion: BROWSER_ASSET_PROVIDER_V1,
+      discover: assetAvailability(raw.discover),
+      read: assetAvailability(raw.read),
+      maxRawChunkBytes: BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES,
+      replayWindowChunks: BROWSER_ASSET_PROVIDER_V1_REPLAY_WINDOW_CHUNKS,
+    };
+  }
+
+  async discoverAssets(
+    request: BrowserAssetDiscoveryRequest,
+    options: BrowserOperationOptions = {},
+  ): Promise<BrowserAssetDiscovery> {
+    const session = this.#sessionFor(request.browserInstanceId);
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "asset_discover_v1",
+      {
+        context_id: request.contextId,
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      },
+      brokerOptions(options),
+    );
+    const raw = assertAssetOk(response) as RawAssetDiscoveryResult;
+    const browserInstanceId = stringOrEmpty(raw.browser_instance_id) || request.browserInstanceId;
+    const contextId = stringOrEmpty(raw.context_id) || request.contextId;
+    const documentId = stringOrEmpty(raw.document_id);
+    const frameId = stringOrEmpty(raw.frame_identity) || "top";
+    const snapshotId = nullableString(raw.snapshot_id) ?? undefined;
+    const assets = Array.isArray(raw.assets) ? raw.assets as RawAssetDiscoveryAsset[] : [];
+    return {
+      protocolVersion: BROWSER_ASSET_PROVIDER_V1,
+      browserInstanceId,
+      contextId,
+      documentId,
+      assets: assets.map((asset, index) => {
+        const width = nullableNumber(asset.intrinsic_width);
+        const height = nullableNumber(asset.intrinsic_height);
+        const discoveredAt = nullableNumber(asset.discovered_at) ?? 0;
+        const expiresAt = nullableNumber(asset.expires_at) ?? discoveredAt;
+        return {
+          assetRef: stringOrEmpty(asset.asset_ref),
+          browserInstanceId,
+          contextId,
+          documentId,
+          frameId,
+          ...(snapshotId ? { snapshotId } : {}),
+          ...(typeof asset.element_ref === "string" ? { elementRef: asset.element_ref } : {}),
+          ...(typeof asset.container_ref === "string" ? { containerRef: asset.container_ref } : {}),
+          ...(typeof asset.safe_label === "string" ? { safeLabel: asset.safe_label } : {}),
+          documentOrder: nullableNumber(asset.document_order) ?? index,
+          mediaKind: assetMediaKind(asset.media_kind),
+          rendered: asset.rendered === true,
+          ...(width !== null && height !== null && width > 0 && height > 0
+            ? { intrinsicDimensions: { width, height } }
+            : {}),
+          representation: { role: assetRepresentationRole(asset.representation?.role) },
+          discoveredAt,
+          expiresAt,
+        };
+      }),
+    };
+  }
+
+  async openAsset(
+    request: BrowserAssetOpenRequest,
+    options: BrowserOperationOptions = {},
+  ): Promise<BrowserAssetOpenResult> {
+    if (!Number.isSafeInteger(request.maxBytes) || request.maxBytes <= 0) {
+      throw assetProtocolError("invalid_max_bytes");
+    }
+    const session = this.#sessionFor(request.browserInstanceId);
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "asset_open_v1",
+      {
+        context_id: request.contextId,
+        asset_ref: request.assetRef,
+        max_bytes: request.maxBytes,
+      },
+      brokerOptions(options),
+    );
+    const raw = assertAssetOk(response) as RawAssetOpenResult;
+    const transferId = stringOrEmpty(raw.transfer_id);
+    const assetHandle = stringOrEmpty(raw.asset_handle);
+    const contentLength = raw.content_length === null ? null : nonNegativeSafeInteger(raw.content_length);
+    const nextSequence = nonNegativeSafeInteger(raw.next_sequence);
+    const nextOffset = nonNegativeSafeInteger(raw.next_offset);
+    const maxRawChunkBytes = nonNegativeSafeInteger(raw.max_raw_chunk_bytes);
+    const replayWindowChunks = nonNegativeSafeInteger(raw.replay_window_chunks);
+    const representationBinding = raw.representation_binding === "response-identity-proven"
+      ? "response-identity-proven"
+      : raw.representation_binding === "source-revalidated"
+        ? "source-revalidated"
+        : null;
+    const failOpen = async (reason: string): Promise<never> => {
+      if (assetHandle) {
+        try {
+          await sendFirefoxBrokerRequest(
+            session,
+            "asset_close_v1",
+            { asset_handle: assetHandle, reason: "consumer_error" },
+            brokerOptions(options),
+          );
+        } catch {
+          // Best-effort cleanup when the open handshake itself is malformed.
+        }
+      }
+      throw assetProtocolError(reason);
+    };
+    if (!transferId || !assetHandle) return failOpen("missing_transfer_identity");
+    if (raw.content_length !== null && contentLength === null) return failOpen("invalid_content_length");
+    if (nextSequence !== 0 || nextOffset !== 0) return failOpen("invalid_initial_position");
+    if (maxRawChunkBytes !== BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES) return failOpen("chunk_ceiling_mismatch");
+    if (replayWindowChunks !== BROWSER_ASSET_PROVIDER_V1_REPLAY_WINDOW_CHUNKS) return failOpen("replay_window_mismatch");
+    if (!representationBinding) return failOpen("invalid_representation_binding");
+
+    this.#assetTransfers.set(assetHandle, {
+      browserInstanceId: request.browserInstanceId,
+      contextId: request.contextId,
+      transferId,
+      nextSequence: 0,
+      nextOffset: 0,
+      bytes: 0,
+      hash: createHash("sha256"),
+      terminal: false,
+    });
+    return {
+      protocolVersion: BROWSER_ASSET_PROVIDER_V1,
+      transferId,
+      assetHandle,
+      mimeType: stringOrEmpty(raw.mime_type) || "application/octet-stream",
+      contentLength,
+      nextSequence: 0,
+      nextOffset: 0,
+      maxRawChunkBytes: BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES,
+      replayWindowChunks: BROWSER_ASSET_PROVIDER_V1_REPLAY_WINDOW_CHUNKS,
+      representationBinding,
+    };
+  }
+
+  async readAssetChunk(
+    request: BrowserAssetReadChunkRequest,
+    options: BrowserOperationOptions = {},
+  ): Promise<BrowserAssetReadChunkResult> {
+    const tracker = this.#assetTransfers.get(request.assetHandle);
+    if (!tracker) throw assetProtocolError("asset_handle_unknown_or_expired");
+    if (!Number.isSafeInteger(request.maxRawBytes) || request.maxRawBytes <= 0
+      || request.maxRawBytes > BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES) {
+      return this.#failAssetTransfer(request.assetHandle, tracker, "invalid_max_raw_bytes");
+    }
+    const replay = tracker.last
+      && request.sequence === tracker.last.sequence
+      && request.offset === tracker.last.offset;
+    if (!replay && (tracker.terminal
+      || request.sequence !== tracker.nextSequence
+      || request.offset !== tracker.nextOffset)) {
+      return this.#failAssetTransfer(request.assetHandle, tracker, "sequence_or_offset_mismatch");
+    }
+
+    const session = this.#sessionFor(tracker.browserInstanceId);
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "asset_read_chunk_v1",
+      {
+        asset_handle: request.assetHandle,
+        sequence: request.sequence,
+        offset: request.offset,
+        max_raw_bytes: request.maxRawBytes,
+      },
+      brokerOptions(options),
+    );
+    const raw = assertAssetOk(response) as RawAssetChunkResult;
+    const transferId = stringOrEmpty(raw.transfer_id);
+    const sequence = nonNegativeSafeInteger(raw.sequence);
+    const offset = nonNegativeSafeInteger(raw.offset);
+    const rawBytes = nonNegativeSafeInteger(raw.raw_bytes);
+    const dataBase64 = stringOrEmpty(raw.data_base64);
+    if (transferId !== tracker.transferId) return this.#failAssetTransfer(request.assetHandle, tracker, "transfer_id_mismatch");
+    if (sequence !== request.sequence || offset !== request.offset) return this.#failAssetTransfer(request.assetHandle, tracker, "response_position_mismatch");
+    if (rawBytes === null || rawBytes > request.maxRawBytes || rawBytes > BROWSER_ASSET_PROVIDER_V1_MAX_RAW_CHUNK_BYTES) {
+      return this.#failAssetTransfer(request.assetHandle, tracker, "invalid_raw_byte_count");
+    }
+    if (raw.eof !== true && raw.eof !== false) return this.#failAssetTransfer(request.assetHandle, tracker, "invalid_eof_flag");
+    const decoded = Buffer.from(dataBase64, "base64");
+    if (decoded.byteLength !== rawBytes) return this.#failAssetTransfer(request.assetHandle, tracker, "base64_raw_byte_mismatch");
+
+    const terminalBytes = raw.eof === true ? nonNegativeSafeInteger(raw.terminal?.acquisition_bytes) : undefined;
+    const terminalSha256 = raw.eof === true ? stringOrEmpty(raw.terminal?.acquisition_sha256).toLowerCase() : undefined;
+    if (raw.eof === true && (terminalBytes === null || !/^[a-f0-9]{64}$/.test(terminalSha256 || ""))) {
+      return this.#failAssetTransfer(request.assetHandle, tracker, "invalid_terminal_record");
+    }
+    if (raw.eof === false && raw.terminal !== undefined) {
+      return this.#failAssetTransfer(request.assetHandle, tracker, "terminal_before_eof");
+    }
+
+    const mapped: BrowserAssetReadChunkResult = raw.eof === true
+      ? {
+          transferId: tracker.transferId,
+          sequence: request.sequence,
+          offset: request.offset,
+          rawBytes,
+          dataBase64,
+          eof: true,
+          terminal: {
+            acquisitionBytes: terminalBytes!,
+            acquisitionSha256: terminalSha256!,
+          },
+        }
+      : {
+          transferId: tracker.transferId,
+          sequence: request.sequence,
+          offset: request.offset,
+          rawBytes,
+          dataBase64,
+          eof: false,
+        };
+
+    if (replay) {
+      const last = tracker.last!;
+      if (last.rawBytes !== rawBytes
+        || last.dataBase64 !== dataBase64
+        || last.eof !== raw.eof
+        || last.terminalBytes !== terminalBytes
+        || last.terminalSha256 !== terminalSha256) {
+        return this.#failAssetTransfer(request.assetHandle, tracker, "replay_not_byte_identical");
+      }
+      return last.mapped;
+    }
+
+    tracker.hash.update(decoded);
+    tracker.bytes += rawBytes;
+    tracker.nextSequence = request.sequence + 1;
+    tracker.nextOffset = request.offset + rawBytes;
+    if (raw.eof === true) {
+      const consumerSha256 = tracker.hash.copy().digest("hex");
+      if (terminalBytes !== tracker.bytes) return this.#failAssetTransfer(request.assetHandle, tracker, "terminal_byte_count_mismatch");
+      if (terminalSha256 !== consumerSha256) return this.#failAssetTransfer(request.assetHandle, tracker, "terminal_digest_mismatch");
+      tracker.terminal = true;
+    }
+    tracker.last = {
+      sequence: request.sequence,
+      offset: request.offset,
+      rawBytes,
+      dataBase64,
+      eof: raw.eof,
+      ...(terminalBytes == null ? {} : { terminalBytes }),
+      ...(terminalSha256 === undefined ? {} : { terminalSha256 }),
+      mapped,
+    };
+    return mapped;
+  }
+
+  async closeAsset(
+    request: BrowserAssetCloseRequest,
+    options: BrowserOperationOptions = {},
+  ): Promise<BrowserAssetCloseResult> {
+    const tracker = this.#assetTransfers.get(request.assetHandle);
+    if (!tracker) return { closed: true };
+    const session = this.#sessionFor(tracker.browserInstanceId);
+    try {
+      const response = await sendFirefoxBrokerRequest(
+        session,
+        "asset_close_v1",
+        {
+          asset_handle: request.assetHandle,
+          ...(request.reason === undefined ? {} : { reason: request.reason }),
+        },
+        brokerOptions(options),
+      );
+      const raw = assertAssetOk(response) as { closed?: unknown };
+      if (raw.closed !== true) throw assetProtocolError("close_not_acknowledged");
+      return { closed: true };
+    } finally {
+      this.#assetTransfers.delete(request.assetHandle);
+    }
   }
 
   async snapshot(
@@ -390,13 +850,16 @@ export class FirefoxBrowserProvider implements BrowserProvider {
   }
 
   async close(): Promise<void> {
-    // This provider owns no browser process, companion, native-host process, or persistent socket.
-    // Each broker request is a bounded exchange against infrastructure owned by Firefox/the operator.
+    const active = [...this.#assetTransfers.entries()];
+    await Promise.all(active.map(async ([assetHandle, tracker]) => {
+      await this.#closeAssetHandleBestEffort(assetHandle, tracker, "consumer_abort");
+    }));
+    // Browser process, companion and native-host lifetime remain operator-owned.
   }
 
 }
 
-export function createFirefoxBrowserProvider(options: FirefoxBrowserProviderOptions = {}): BrowserProvider {
+export function createFirefoxBrowserProvider(options: FirefoxBrowserProviderOptions = {}): FirefoxBrowserProvider {
   return new FirefoxBrowserProvider(options);
 }
 

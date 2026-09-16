@@ -2,9 +2,11 @@ import crypto from "node:crypto";
 
 import type { ExtensionAPI, ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import {
+  BROWSER_ASSET_PROVIDER_V1,
   hasCapability,
   resolveBrowserInstance,
   type BrowserAction,
+  type BrowserAssetProviderV1,
   type BrowserOperationOptions,
   type BrowserProvider,
 } from "@zamery/browser-provider";
@@ -24,6 +26,13 @@ export const BROWSER_STATUS_TOOL = "browser_status";
 export const BROWSER_CONTEXTS_TOOL = "browser_contexts";
 export const BROWSER_SNAPSHOT_TOOL = "browser_snapshot";
 export const BROWSER_ACT_TOOL = "browser_act";
+export const BROWSER_ASSETS_TOOL = "browser_assets";
+
+export const BROWSER_ASSETS_AGENT_GUIDANCE = [
+  "For save/import workflows, filter discovery results to the requested media kind and use semantic container linkage plus document order; do not infer relevance or original/full-resolution status from dimensions, filenames, or URL-like text.",
+  "Treat representation.role=unknown as genuinely unknown. Do not upgrade unknown to original/preview/thumbnail without provider evidence.",
+  "If multiple candidates remain equally plausible after relevant-container and newest-order evidence, ask the user rather than guessing. If an asset ref is stale or expired, rediscover instead of inventing or reconstructing a source URL.",
+] as const;
 
 export const zameryConfig = {
   revision: 1,
@@ -75,6 +84,16 @@ export const zameryTools = {
     resultProves: "It reports the provider's exact completed/not_started/partial/unknown outcome for that request ID.",
     resultDoesNotProve: "It does not imply trusted input, browser-default behavior, rollback, or safe automatic retry.",
   },
+  [BROWSER_ASSETS_TOOL]: {
+    purpose: "Discover browser-selected media assets in one live context and return only opaque refs plus safe semantic metadata.",
+    antiPurpose: "Do not expose currentSrc/source URLs, cookies, authorization headers, storage tokens, or infer original/preview roles from dimensions or filenames.",
+    effect: "read-only",
+    workspaceScope: "external",
+    resourceScope: ["browser provider session", "live browser DOM", "provider-owned opaque asset registry"],
+    prerequisites: ["the selected provider/context must advertise BrowserAssetProviderV1 discovery readiness"],
+    resultProves: "It reports the provider's safe asset descriptors observed for that context and binds each opaque asset_ref to its browser instance/context for later import.",
+    resultDoesNotProve: "It does not prove an asset remains current after discovery or that an unknown representation role is an original/full-resolution resource.",
+  },
 } as const;
 
 const timeoutField = Type.Optional(Type.Number({ minimum: 1, maximum: 120_000 }));
@@ -105,6 +124,16 @@ export const browserSnapshotParameters = Type.Object(
   { additionalProperties: false },
 );
 
+export const browserAssetsParameters = Type.Object(
+  {
+    browser_instance_id: instanceField,
+    context_id: Type.String({ minLength: 1 }),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+    timeout_ms: timeoutField,
+  },
+  { additionalProperties: false },
+);
+
 const commonActFields = {
   request_id: Type.String({ minLength: 1, maxLength: 200 }),
   browser_instance_id: instanceField,
@@ -120,6 +149,13 @@ export const browserActParameters = Type.Union([
   Type.Object({ ...commonActFields, action: Type.Literal("key"), key: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
 ]);
 
+interface BrowserAssetRefBinding {
+  providerId: string;
+  browserInstanceId: string;
+  contextId: string;
+  expiresAt: number;
+}
+
 interface BrowserExtensionState {
   workspaceRoot: string;
   clientId: string;
@@ -128,6 +164,7 @@ interface BrowserExtensionState {
   discoveryProvider: BrowserProvider | null;
   providersByInstance: Map<string, BrowserProvider>;
   ownedProviders: Set<BrowserProvider>;
+  assetRefs: Map<string, BrowserAssetRefBinding>;
 }
 
 const states = new Map<string, BrowserExtensionState>();
@@ -161,6 +198,72 @@ async function providerForInstance(state: BrowserExtensionState, browserInstance
   const provider = await createProvider(state, browserInstanceId);
   state.providersByInstance.set(browserInstanceId, provider);
   return provider;
+}
+
+function asBrowserAssetProvider(provider: BrowserProvider): BrowserAssetProviderV1 {
+  const candidate = provider as BrowserProvider & Partial<BrowserAssetProviderV1>;
+  if (candidate.assetProtocolVersion !== BROWSER_ASSET_PROVIDER_V1
+    || typeof candidate.assetCapabilities !== "function"
+    || typeof candidate.discoverAssets !== "function"
+    || typeof candidate.openAsset !== "function"
+    || typeof candidate.readAssetChunk !== "function"
+    || typeof candidate.closeAsset !== "function") {
+    throw new Error("browser provider does not expose BrowserAssetProviderV1");
+  }
+  return candidate as BrowserProvider & BrowserAssetProviderV1;
+}
+
+function rememberAssetRefs(
+  state: BrowserExtensionState,
+  providerId: string,
+  assets: readonly { assetRef: string; browserInstanceId: string; contextId: string; expiresAt: number }[],
+): void {
+  const now = Date.now();
+  for (const [assetRef, binding] of state.assetRefs) {
+    if (binding.expiresAt <= now) state.assetRefs.delete(assetRef);
+  }
+  for (const asset of assets) {
+    state.assetRefs.set(asset.assetRef, {
+      providerId,
+      browserInstanceId: asset.browserInstanceId,
+      contextId: asset.contextId,
+      expiresAt: asset.expiresAt,
+    });
+  }
+  while (state.assetRefs.size > 2_048) {
+    const oldest = state.assetRefs.keys().next().value as string | undefined;
+    if (!oldest) break;
+    state.assetRefs.delete(oldest);
+  }
+}
+
+export interface BrowserAssetProviderBridgeSelection {
+  provider: BrowserAssetProviderV1;
+  providerId: string;
+  browserInstanceId: string;
+  contextId: string;
+}
+
+/** Internal same-process bridge for the asset_import adapter. It never exposes provider URLs/credentials. */
+export async function resolveBrowserAssetProviderForWorkspace(
+  workspaceRoot: string,
+  assetRef: string,
+): Promise<BrowserAssetProviderBridgeSelection> {
+  const state = states.get(workspaceRoot);
+  if (!state || !state.factory) throw new Error(`browser provider state unavailable for ${workspaceRoot}`);
+  const binding = state.assetRefs.get(assetRef);
+  if (!binding) throw Object.assign(new Error("browser asset ref is unknown to this workspace runtime"), { code: "BROWSER_ASSET_REF_UNKNOWN" });
+  if (binding.expiresAt <= Date.now()) {
+    state.assetRefs.delete(assetRef);
+    throw Object.assign(new Error("browser asset ref has expired"), { code: "BROWSER_ASSET_REF_EXPIRED" });
+  }
+  const provider = asBrowserAssetProvider(await providerForInstance(state, binding.browserInstanceId));
+  return {
+    provider,
+    providerId: binding.providerId,
+    browserInstanceId: binding.browserInstanceId,
+    contextId: binding.contextId,
+  };
 }
 
 async function selectInstance(
@@ -225,6 +328,7 @@ async function closeState(workspaceRoot: string, state: BrowserExtensionState): 
   const providers = [...state.ownedProviders];
   state.ownedProviders.clear();
   state.providersByInstance.clear();
+  state.assetRefs.clear();
   state.discoveryProvider = null;
   const settled = await Promise.allSettled(providers.map((provider) => provider.close()));
   if (states.get(workspaceRoot) === state) states.delete(workspaceRoot);
@@ -259,6 +363,7 @@ function createBrowserExtension(
     discoveryProvider: null,
     providersByInstance: new Map(),
     ownedProviders: new Set(),
+    assetRefs: new Map(),
   };
   states.set(context.workspaceRoot, state);
 
@@ -327,6 +432,43 @@ function createBrowserExtension(
         return {
           content: [{ type: "text" as const, text: `snapshot ${snapshot.snapshotId}: ${snapshot.nodes.length} nodes` }],
           details: { client_id: state.clientId, snapshot },
+        };
+      },
+    });
+
+    pi.registerTool({
+      name: BROWSER_ASSETS_TOOL,
+      label: "Browser assets",
+      description: "Discover safe browser-backed media asset descriptors for one live context. Sensitive source URLs remain provider-internal.",
+      promptSnippet: "Discover opaque browser assets and select by media kind plus semantic container/order evidence; ask rather than guess when equally plausible candidates remain.",
+      promptGuidelines: [...BROWSER_ASSETS_AGENT_GUIDANCE],
+      parameters: browserAssetsParameters,
+      async execute(_toolCallId, params, signal) {
+        const options = operationOptions(signal, params.timeout_ms);
+        const { selected, provider } = await selectInstance(state, params.browser_instance_id, options);
+        const assetProvider = asBrowserAssetProvider(provider);
+        const capabilities = await assetProvider.assetCapabilities({
+          browserInstanceId: selected.browserInstanceId,
+          contextId: params.context_id,
+        }, options);
+        if (capabilities.discover.state !== "ready") {
+          const reason = "reason" in capabilities.discover ? capabilities.discover.reason : "asset_discovery_not_ready";
+          throw new Error(`browser asset discovery unavailable: ${reason}`);
+        }
+        const discovery = await assetProvider.discoverAssets({
+          browserInstanceId: selected.browserInstanceId,
+          contextId: params.context_id,
+          ...(params.limit !== undefined ? { limit: params.limit } : {}),
+        }, options);
+        const status = await provider.status(options);
+        rememberAssetRefs(state, status.providerId, discovery.assets);
+        return {
+          content: [{ type: "text" as const, text: `${discovery.assets.length} browser assets in ${params.context_id}` }],
+          details: {
+            client_id: state.clientId,
+            browser_instance_id: selected.browserInstanceId,
+            discovery,
+          },
         };
       },
     });

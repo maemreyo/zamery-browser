@@ -5,6 +5,17 @@ const MAX_COMPLETED_REQUESTS = 512;
 const MAX_CAPTURE_PIXELS = 8_000_000;
 const DEFAULT_MAX_ENCODED_BYTES = 8 * 1024 * 1024;
 const PRIMARY_DOCUMENT_TARGET = { frameId: 0 };
+const A1_DEVELOPMENT_EXTENSION_ID = "zamery-live-browser-v0c@zamery.local";
+const A1_REGISTRY_TTL_MS = 5 * 60 * 1000;
+const A1_MAX_ASSET_REFS = 256;
+const A1_MAX_ACTIVE_TRANSFERS = 8;
+const A1_CONTENT_RPC_TIMEOUT_MS = 5_000;
+const ASSET_V1_REGISTRY_TTL_MS = 5 * 60 * 1000;
+const ASSET_V1_TRANSFER_TTL_MS = 2 * 60 * 1000;
+const ASSET_V1_MAX_REFS = 256;
+const ASSET_V1_MAX_ACTIVE_TRANSFERS = 8;
+const ASSET_DISCOVERY_CONTENT_RPC_TIMEOUT_MS = 5_000;
+const ASSET_TRANSFER_CONTENT_RPC_TIMEOUT_MS = 35_000;
 
 let nativePort;
 let profileId = "";
@@ -15,6 +26,12 @@ const completedRequests = new Map();
 const inFlightRequests = new Map();
 const cancelledRequests = new Set();
 const requestPhases = new Map();
+const a1AssetRefs = new Map();
+const assetV1Refs = new Map();
+const assetV1Transfers = new Map();
+const assetV1RequestContexts = new Map();
+const a1Transfers = new Map();
+const a1RequestContexts = new Map();
 let nativeConnectAttempt = 0;
 let heartbeatTimer = null;
 let currentHostSessionId = null;
@@ -86,6 +103,7 @@ function connectNative() {
   nativePort.onDisconnect.addListener((port) => {
     const error = port?.error?.message || browser.runtime.lastError?.message || null;
     void recordNativeDiagnostic({ state: "disconnected", attempt, error });
+    void teardownAssetV1Transfers("native_disconnect");
     nativePort = undefined;
     setTimeout(connectNative, 1000);
   });
@@ -145,6 +163,22 @@ async function onNativeMessage(message) {
   }
   if (message.type === "cancel" && typeof message.target_id === "string") {
     cancelledRequests.add(message.target_id);
+    const assetV1Target = assetV1RequestContexts.get(message.target_id);
+    if (assetV1Target) {
+      void browser.tabs.sendMessage(
+        assetV1Target.tab_id,
+        { type: "zamery_browser_firefox_asset_cancel_request_v1", request_id: message.target_id },
+        { frameId: 0 },
+      ).catch(() => undefined);
+    }
+    const a1Target = a1RequestContexts.get(message.target_id);
+    if (a1Target) {
+      void browser.tabs.sendMessage(
+        a1Target.tab_id,
+        { type: "zamery_browser_firefox_a1_asset_cancel_request", request_id: message.target_id },
+        { frameId: 0 },
+      ).catch(() => undefined);
+    }
     postNative({
       type: "cancel_ack",
       id: message.id || null,
@@ -203,11 +237,12 @@ async function onNativeMessage(message) {
   const response = await execution;
   inFlightRequests.delete(id);
 
-  rememberCompleted(id, fingerprint, response);
+  rememberCompleted(id, fingerprint, response, message.op);
   postNative({ type: "response", id, replayed: false, ...response });
 }
 
-function rememberCompleted(id, fingerprint, response) {
+function rememberCompleted(id, fingerprint, response, op) {
+  if (op === "asset_read_chunk_v1" || op === "a1_asset_read_chunk") return;
   completedRequests.set(id, { fingerprint, response });
   while (completedRequests.size > MAX_COMPLETED_REQUESTS) {
     const oldest = completedRequests.keys().next().value;
@@ -287,6 +322,15 @@ async function executeRequest(message) {
   if (op === "create_tab") return createOwnedTab(params);
   if (op === "close_owned_tab") return closeOwnedTab(params);
   if (op === "screenshot_probe") return screenshotProbe(params);
+  if (op === "asset_capabilities_v1") return assetCapabilitiesV1(params);
+  if (op === "asset_discover_v1") return assetDiscoverV1(params);
+  if (op === "asset_open_v1") return assetOpenV1(params, message.id);
+  if (op === "asset_read_chunk_v1") return assetReadChunkV1(params, message.id);
+  if (op === "asset_close_v1") return assetCloseV1(params, message.id);
+  if (op === "a1_asset_discover") return a1AssetDiscover(params, message.id);
+  if (op === "a1_asset_open") return a1AssetOpen(params, message.id);
+  if (op === "a1_asset_read_chunk") return a1AssetReadChunk(params, message.id);
+  if (op === "a1_asset_close") return a1AssetClose(params, message.id);
 
   const error = new Error(`unsupported operation: ${op}`);
   error.code = "UNSUPPORTED_OPERATION";
@@ -340,6 +384,675 @@ async function ensureContent(tabId) {
       throw wrapped;
     }
   }
+}
+
+async function ensureAssetDiscoveryContent(tabId) {
+  try {
+    const ping = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+    if (ping?.asset_discovery_v1_ready) return ping;
+  } catch {}
+  try {
+    await browser.tabs.executeScript(tabId, {
+      file: "asset-discovery-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "asset-transfer-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "content.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    const ping = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+    if (ping?.asset_discovery_v1_ready) return ping;
+    throw new Error("asset discovery helper did not initialize");
+  } catch (error) {
+    const wrapped = new Error("browser asset discovery content is unavailable");
+    wrapped.code = "BROWSER_CONTEXT_GONE";
+    wrapped.reason = "asset_discovery_content_unavailable";
+    throw wrapped;
+  }
+}
+
+async function assetDiscoveryContentCall(tabId, message) {
+  let timer;
+  try {
+    const response = await Promise.race([
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error("browser asset discovery content RPC timed out");
+          error.code = "BROWSER_ASSET_TIMEOUT";
+          error.reason = "content_rpc_timeout";
+          reject(error);
+        }, ASSET_DISCOVERY_CONTENT_RPC_TIMEOUT_MS);
+      }),
+    ]);
+    if (!response?.ok) {
+      const error = new Error(String(response?.error?.message || "browser asset discovery failed"));
+      error.code = response?.error?.code || "BROWSER_ASSET_FETCH_FAILED";
+      error.reason = response?.error?.reason;
+      throw error;
+    }
+    return response.result;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function cleanupAssetV1Registry() {
+  const current = Date.now();
+  for (const [ref, entry] of assetV1Refs) {
+    if (entry.expires_at <= current) assetV1Refs.delete(ref);
+  }
+}
+
+async function assetDiscoverV1(params) {
+  cleanupAssetV1Registry();
+  const contextId = String(params.context_id || "");
+  const tabId = tabIdFromContext(contextId);
+  const ping = await ensureAssetDiscoveryContent(tabId);
+  const discovered = await assetDiscoveryContentCall(tabId, {
+    type: "zamery_browser_firefox_asset_discover_v1",
+  });
+  if (discovered?.document_id !== ping.document_id) {
+    const error = new Error("asset discovery document identity changed during discovery");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "document_identity_mismatch";
+    throw error;
+  }
+  const requestedLimit = Number(params.limit);
+  const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+    ? Math.min(100, requestedLimit)
+    : 100;
+  const snapshotId = crypto.randomUUID();
+  const sourceAssets = Array.isArray(discovered?.assets) ? discovered.assets.slice(0, limit) : [];
+  const assets = sourceAssets.map((asset) => {
+    const publicRef = `basset_v1_${crypto.randomUUID()}`;
+    assetV1Refs.set(publicRef, {
+      browser_instance_id: browserInstanceId,
+      context_id: contextId,
+      tab_id: tabId,
+      document_id: ping.document_id,
+      content_asset_ref: asset.asset_ref,
+      expires_at: Number(asset.expires_at) || Date.now() + ASSET_V1_REGISTRY_TTL_MS,
+    });
+    while (assetV1Refs.size > ASSET_V1_MAX_REFS) assetV1Refs.delete(assetV1Refs.keys().next().value);
+    const elementRef = asset.element_node_id ? encodeRef({
+      b: browserInstanceId,
+      c: contextId,
+      d: ping.document_id,
+      f: 0,
+      s: snapshotId,
+      n: asset.element_node_id,
+    }) : undefined;
+    const containerRef = asset.container_node_id ? encodeRef({
+      b: browserInstanceId,
+      c: contextId,
+      d: ping.document_id,
+      f: 0,
+      s: snapshotId,
+      n: asset.container_node_id,
+    }) : undefined;
+    return {
+      asset_ref: publicRef,
+      media_kind: asset.media_kind,
+      safe_label: asset.safe_label,
+      document_order: asset.document_order,
+      rendered: asset.rendered === true,
+      intrinsic_width: asset.intrinsic_width,
+      intrinsic_height: asset.intrinsic_height,
+      representation: { role: asset?.representation?.role || "unknown" },
+      discovered_at: asset.discovered_at,
+      expires_at: asset.expires_at,
+      ...(elementRef ? { element_ref: elementRef } : {}),
+      ...(containerRef ? { container_ref: containerRef } : {}),
+    };
+  });
+  return {
+    schema: "zamery-browser-assets-v1/1",
+    browser_instance_id: browserInstanceId,
+    context_id: contextId,
+    document_id: ping.document_id,
+    frame_identity: "top",
+    snapshot_id: snapshotId,
+    assets,
+  };
+}
+
+async function assetCapabilitiesV1(params) {
+  const contextId = String(params.context_id || "");
+  const tabId = tabIdFromContext(contextId);
+  try {
+    const ping = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+    return {
+      discover: ping?.asset_discovery_v1_ready
+        ? { state: "ready" }
+        : { state: "unavailable", reason: "asset_discovery_helper_requires_reload" },
+      read: ping?.asset_transfer_v1_ready
+        ? { state: "ready" }
+        : { state: "unavailable", reason: "asset_transfer_helper_requires_reload" },
+    };
+  } catch {
+    return {
+      discover: { state: "unavailable", reason: "content_unavailable" },
+      read: { state: "unavailable", reason: "content_unavailable" },
+    };
+  }
+}
+
+async function ensureAssetTransferContent(tabId) {
+  let ping;
+  try {
+    ping = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+  } catch {
+    ping = null;
+  }
+  if (ping?.asset_transfer_v1_ready) return ping;
+  if (ping) {
+    const error = new Error("browser asset transfer helper is not loaded in the current document");
+    error.code = "BROWSER_ASSET_FETCH_FAILED";
+    error.reason = "asset_transfer_helper_requires_reload";
+    throw error;
+  }
+  try {
+    await browser.tabs.executeScript(tabId, {
+      file: "asset-discovery-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "asset-transfer-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "content.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    const nextPing = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+    if (nextPing?.asset_transfer_v1_ready) return nextPing;
+    throw new Error("asset transfer helper did not initialize");
+  } catch (error) {
+    const wrapped = new Error("browser asset transfer content is unavailable");
+    wrapped.code = "BROWSER_ASSET_FETCH_FAILED";
+    wrapped.reason = "asset_transfer_content_unavailable";
+    throw wrapped;
+  }
+}
+
+async function assetTransferContentCall(tabId, message) {
+  let timer;
+  try {
+    const response = await Promise.race([
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error("browser asset transfer content RPC timed out");
+          error.code = "BROWSER_ASSET_TIMEOUT";
+          error.reason = "content_rpc_timeout";
+          reject(error);
+        }, ASSET_TRANSFER_CONTENT_RPC_TIMEOUT_MS);
+      }),
+    ]);
+    if (!response?.ok) {
+      const error = new Error(String(response?.error?.message || "browser asset transfer failed"));
+      error.code = response?.error?.code || "BROWSER_ASSET_FETCH_FAILED";
+      error.reason = response?.error?.reason;
+      throw error;
+    }
+    return response.result;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function cleanupAssetV1Registries() {
+  const current = Date.now();
+  for (const [ref, entry] of assetV1Refs) {
+    if (entry.expires_at <= current) assetV1Refs.delete(ref);
+  }
+  for (const [handle, transfer] of assetV1Transfers) {
+    if (transfer.expires_at > current) continue;
+    assetV1Transfers.delete(handle);
+    void browser.tabs.sendMessage(
+      transfer.tab_id,
+      { type: "zamery_browser_firefox_asset_close_v1", asset_handle: transfer.content_asset_handle, reason: "timeout" },
+      { frameId: 0 },
+    ).catch(() => undefined);
+  }
+}
+
+async function withAssetV1Request(requestId, tabId, run) {
+  if (cancelledRequests.has(requestId)) {
+    cancelledRequests.delete(requestId);
+    const error = new Error("browser asset request cancelled before execution");
+    error.code = "BROWSER_ASSET_ABORTED";
+    error.reason = "cancelled_before_start";
+    throw error;
+  }
+  requestPhases.set(requestId, "started");
+  assetV1RequestContexts.set(requestId, { tab_id: tabId });
+  try {
+    return await run();
+  } finally {
+    assetV1RequestContexts.delete(requestId);
+    requestPhases.delete(requestId);
+    cancelledRequests.delete(requestId);
+  }
+}
+
+async function assetOpenV1(params, requestId) {
+  cleanupAssetV1Registries();
+  const publicRef = String(params.asset_ref || "");
+  const asset = assetV1Refs.get(publicRef);
+  if (!asset) {
+    const error = new Error("browser asset ref is unknown or expired");
+    error.code = "BROWSER_ASSET_REF_UNKNOWN";
+    error.reason = "unknown_or_expired";
+    throw error;
+  }
+  const requestedContextId = String(params.context_id || "");
+  if (asset.browser_instance_id !== browserInstanceId || (requestedContextId && requestedContextId !== asset.context_id)) {
+    const error = new Error("browser asset binding changed");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "browser_or_context_changed";
+    throw error;
+  }
+  const ping = await ensureAssetTransferContent(asset.tab_id);
+  if (ping?.document_id !== asset.document_id) {
+    const error = new Error("browser document changed");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "document_changed";
+    throw error;
+  }
+  if (assetV1Transfers.size >= ASSET_V1_MAX_ACTIVE_TRANSFERS) {
+    const error = new Error("browser asset transfer limit reached");
+    error.code = "BROWSER_ASSET_TRANSFER_PROTOCOL";
+    error.reason = "active_transfer_limit_reached";
+    throw error;
+  }
+  return withAssetV1Request(requestId, asset.tab_id, async () => {
+    const opened = await assetTransferContentCall(asset.tab_id, {
+      type: "zamery_browser_firefox_asset_open_v1",
+      asset_ref: asset.content_asset_ref,
+      expected_document_id: asset.document_id,
+      max_asset_bytes: params.max_bytes,
+      request_id: requestId,
+    });
+    const publicHandle = `bhandle_v1_${crypto.randomUUID()}`;
+    const publicTransferId = `btransfer_v1_${crypto.randomUUID()}`;
+    assetV1Transfers.set(publicHandle, {
+      browser_instance_id: browserInstanceId,
+      context_id: asset.context_id,
+      tab_id: asset.tab_id,
+      document_id: asset.document_id,
+      content_asset_handle: opened.asset_handle,
+      content_transfer_id: opened.transfer_id,
+      public_transfer_id: publicTransferId,
+      expires_at: Date.now() + ASSET_V1_TRANSFER_TTL_MS,
+    });
+    const { asset_handle: _internalHandle, transfer_id: _internalTransferId, ...safe } = opened;
+    return { ...safe, asset_handle: publicHandle, transfer_id: publicTransferId };
+  });
+}
+
+async function assetReadChunkV1(params, requestId) {
+  cleanupAssetV1Registries();
+  const publicHandle = String(params.asset_handle || "");
+  const transfer = assetV1Transfers.get(publicHandle);
+  if (!transfer) {
+    const error = new Error("browser asset handle is unknown or expired");
+    error.code = "BROWSER_ASSET_TRANSFER_PROTOCOL";
+    error.reason = "asset_handle_unknown_or_expired";
+    throw error;
+  }
+  const ping = await ensureAssetTransferContent(transfer.tab_id);
+  if (ping?.document_id !== transfer.document_id) {
+    assetV1Transfers.delete(publicHandle);
+    const error = new Error("browser document changed during asset transfer");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "document_changed";
+    throw error;
+  }
+  return withAssetV1Request(requestId, transfer.tab_id, async () => {
+    const chunk = await assetTransferContentCall(transfer.tab_id, {
+      type: "zamery_browser_firefox_asset_read_chunk_v1",
+      asset_handle: transfer.content_asset_handle,
+      sequence: params.sequence,
+      offset: params.offset,
+      max_raw_bytes: params.max_raw_bytes,
+      request_id: requestId,
+    });
+    if (chunk.transfer_id !== transfer.content_transfer_id) {
+      assetV1Transfers.delete(publicHandle);
+      const error = new Error("browser asset transfer identity changed");
+      error.code = "BROWSER_ASSET_TRANSFER_PROTOCOL";
+      error.reason = "content_transfer_id_changed";
+      throw error;
+    }
+    transfer.expires_at = Date.now() + ASSET_V1_TRANSFER_TTL_MS;
+    return { ...chunk, transfer_id: transfer.public_transfer_id };
+  });
+}
+
+async function assetCloseV1(params, requestId) {
+  cleanupAssetV1Registries();
+  const publicHandle = String(params.asset_handle || "");
+  const transfer = assetV1Transfers.get(publicHandle);
+  if (!transfer) return { closed: true };
+  assetV1Transfers.delete(publicHandle);
+  return withAssetV1Request(requestId, transfer.tab_id, async () => {
+    await assetTransferContentCall(transfer.tab_id, {
+      type: "zamery_browser_firefox_asset_close_v1",
+      asset_handle: transfer.content_asset_handle,
+      reason: params.reason,
+      request_id: requestId,
+    });
+    return { closed: true };
+  });
+}
+
+async function teardownAssetV1Transfers(reason = "teardown") {
+  const tabIds = new Set();
+  for (const transfer of assetV1Transfers.values()) tabIds.add(transfer.tab_id);
+  assetV1Transfers.clear();
+  assetV1RequestContexts.clear();
+  await Promise.all(Array.from(tabIds, (tabId) => browser.tabs.sendMessage(
+    tabId,
+    { type: "zamery_browser_firefox_asset_teardown_v1", reason },
+    { frameId: 0 },
+  ).catch(() => undefined)));
+}
+
+function requireA1DevelopmentCompanion() {
+  if (browser.runtime.id === A1_DEVELOPMENT_EXTENSION_ID) return;
+  const error = new Error("A1 browser asset experiment is development-companion only");
+  error.code = "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE";
+  error.reason = "production_companion_does_not_advertise_a1_asset_probe";
+  throw error;
+}
+
+async function ensureA1Content(tabId) {
+  requireA1DevelopmentCompanion();
+  try {
+    const ping = await browser.tabs.sendMessage(
+      tabId,
+      { type: "zamery_browser_firefox_ping" },
+      { frameId: 0 },
+    );
+    if (ping?.a1_asset_experiment_ready) return ping;
+    const error = new Error("A1 asset helper is not loaded in the current document");
+    error.code = "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE";
+    error.reason = "development_companion_or_document_requires_reload";
+    throw error;
+  } catch (firstError) {
+    if (firstError?.code === "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE") throw firstError;
+    try {
+      await browser.tabs.executeScript(tabId, {
+        file: "asset-a1-experimental.js",
+        frameId: 0,
+        allFrames: false,
+        runAt: "document_idle",
+      });
+      await browser.tabs.executeScript(tabId, {
+        file: "content.js",
+        frameId: 0,
+        allFrames: false,
+        runAt: "document_idle",
+      });
+      const ping = await browser.tabs.sendMessage(
+        tabId,
+        { type: "zamery_browser_firefox_ping" },
+        { frameId: 0 },
+      );
+      if (ping?.a1_asset_experiment_ready) return ping;
+      throw new Error("A1 asset helper did not initialize");
+    } catch (error) {
+      const wrapped = new Error("A1 browser asset content probe is unavailable");
+      wrapped.code = "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE";
+      wrapped.reason = "content_script_injection_blocked_or_helper_unavailable";
+      throw wrapped;
+    }
+  }
+}
+
+function cleanupA1Registries() {
+  const current = Date.now();
+  for (const [ref, entry] of a1AssetRefs) {
+    if (entry.expires_at <= current) a1AssetRefs.delete(ref);
+  }
+  for (const [handle, entry] of a1Transfers) {
+    if (entry.expires_at <= current) a1Transfers.delete(handle);
+  }
+}
+
+function a1ContentError(response) {
+  const error = new Error(String(response?.error?.message || "A1 browser asset operation failed"));
+  error.code = response?.error?.code || "BROWSER_ASSET_FETCH_FAILED";
+  error.reason = response?.error?.reason;
+  return error;
+}
+
+async function a1ContentCall(tabId, message) {
+  let timer;
+  try {
+    const response = await Promise.race([
+      browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => {
+          const error = new Error("A1 browser asset content RPC timed out");
+          error.code = "BROWSER_ASSET_TIMEOUT";
+          error.reason = "content_rpc_timeout";
+          reject(error);
+        }, A1_CONTENT_RPC_TIMEOUT_MS);
+      }),
+    ]);
+    if (!response?.ok) throw a1ContentError(response);
+    return response.result;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function withA1Request(requestId, tabId, run) {
+  if (cancelledRequests.has(requestId)) {
+    cancelledRequests.delete(requestId);
+    const error = new Error("browser asset request cancelled before execution");
+    error.code = "BROWSER_REQUEST_CANCELLED";
+    error.outcome = "not_started";
+    throw error;
+  }
+  requestPhases.set(requestId, "started");
+  a1RequestContexts.set(requestId, { tab_id: tabId });
+  try {
+    return await run();
+  } finally {
+    a1RequestContexts.delete(requestId);
+    requestPhases.delete(requestId);
+    cancelledRequests.delete(requestId);
+  }
+}
+
+async function a1AssetDiscover(params, requestId) {
+  cleanupA1Registries();
+  const contextId = String(params.context_id || "");
+  const tabId = tabIdFromContext(contextId);
+  const ping = await ensureA1Content(tabId);
+  return withA1Request(requestId, tabId, async () => {
+    const discovered = await a1ContentCall(tabId, {
+      type: "zamery_browser_firefox_a1_asset_discover",
+      request_id: requestId,
+    });
+    if (discovered?.document_id !== ping.document_id) {
+      const error = new Error("asset discovery document identity does not match the top-frame ping");
+      error.code = "BROWSER_ASSET_STALE";
+      error.reason = "document_identity_mismatch";
+      throw error;
+    }
+    const assets = Array.isArray(discovered?.assets) ? discovered.assets.map((asset) => {
+      const publicRef = `basset_a1_${crypto.randomUUID()}`;
+      a1AssetRefs.set(publicRef, {
+        browser_instance_id: browserInstanceId,
+        context_id: contextId,
+        tab_id: tabId,
+        document_id: ping.document_id,
+        content_asset_ref: asset.asset_ref,
+        expires_at: Date.now() + A1_REGISTRY_TTL_MS,
+      });
+      while (a1AssetRefs.size > A1_MAX_ASSET_REFS) a1AssetRefs.delete(a1AssetRefs.keys().next().value);
+      const { asset_ref: _internalRef, ...safe } = asset;
+      return { ...safe, asset_ref: publicRef };
+    }) : [];
+    return {
+      schema: "zamery-browser-assets-a1-experimental/1",
+      browser_instance_id: browserInstanceId,
+      context_id: contextId,
+      document_id: ping.document_id,
+      frame_identity: "top",
+      assets,
+    };
+  });
+}
+
+async function a1AssetOpen(params, requestId) {
+  cleanupA1Registries();
+  const publicRef = String(params.asset_ref || "");
+  const asset = a1AssetRefs.get(publicRef);
+  if (!asset) {
+    const error = new Error("browser asset ref is unknown or expired");
+    error.code = "ASSET_REF_UNKNOWN";
+    throw error;
+  }
+  if (asset.browser_instance_id !== browserInstanceId) {
+    const error = new Error("browser instance changed");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "browser_instance_changed";
+    throw error;
+  }
+  const ping = await ensureA1Content(asset.tab_id);
+  if (ping?.document_id !== asset.document_id) {
+    const error = new Error("browser document changed");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "document_changed";
+    throw error;
+  }
+  if (a1Transfers.size >= A1_MAX_ACTIVE_TRANSFERS) {
+    const error = new Error("A1 browser asset transfer limit reached");
+    error.code = "BROWSER_ASSET_TRANSFER_LIMIT";
+    error.reason = "active_transfer_limit_reached";
+    throw error;
+  }
+  return withA1Request(requestId, asset.tab_id, async () => {
+    const opened = await a1ContentCall(asset.tab_id, {
+      type: "zamery_browser_firefox_a1_asset_open",
+      asset_ref: asset.content_asset_ref,
+      expected_document_id: asset.document_id,
+      max_asset_bytes: params.max_asset_bytes,
+      request_id: requestId,
+    });
+    const publicHandle = `bhandle_a1_${crypto.randomUUID()}`;
+    const publicTransferId = `btransfer_a1_${crypto.randomUUID()}`;
+    a1Transfers.set(publicHandle, {
+      browser_instance_id: browserInstanceId,
+      context_id: asset.context_id,
+      tab_id: asset.tab_id,
+      document_id: asset.document_id,
+      content_asset_handle: opened.asset_handle,
+      content_transfer_id: opened.transfer_id,
+      public_transfer_id: publicTransferId,
+      expires_at: Date.now() + A1_REGISTRY_TTL_MS,
+    });
+    const { asset_handle: _internalHandle, transfer_id: _internalTransferId, ...safe } = opened;
+    return {
+      ...safe,
+      asset_handle: publicHandle,
+      transfer_id: publicTransferId,
+      frame_identity: "top",
+    };
+  });
+}
+
+async function a1AssetReadChunk(params, requestId) {
+  cleanupA1Registries();
+  const publicHandle = String(params.asset_handle || "");
+  const transfer = a1Transfers.get(publicHandle);
+  if (!transfer) {
+    const error = new Error("asset handle is unknown or expired");
+    error.code = "ASSET_HANDLE_UNKNOWN";
+    throw error;
+  }
+  const ping = await ensureA1Content(transfer.tab_id);
+  if (ping?.document_id !== transfer.document_id) {
+    a1Transfers.delete(publicHandle);
+    const error = new Error("browser document changed during asset transfer");
+    error.code = "BROWSER_ASSET_STALE";
+    error.reason = "document_changed";
+    throw error;
+  }
+  return withA1Request(requestId, transfer.tab_id, async () => {
+    const chunk = await a1ContentCall(transfer.tab_id, {
+      type: "zamery_browser_firefox_a1_asset_read_chunk",
+      asset_handle: transfer.content_asset_handle,
+      sequence: params.sequence,
+      offset: params.offset,
+      max_raw_bytes: params.max_raw_bytes,
+      request_id: requestId,
+    });
+    if (chunk.transfer_id !== transfer.content_transfer_id) {
+      a1Transfers.delete(publicHandle);
+      const error = new Error("asset transfer identity changed");
+      error.code = "ASSET_IMPORT_TRANSFER_PROTOCOL";
+      error.reason = "content_transfer_id_changed";
+      throw error;
+    }
+    transfer.expires_at = Date.now() + A1_REGISTRY_TTL_MS;
+    return { ...chunk, transfer_id: transfer.public_transfer_id };
+  });
+}
+
+async function a1AssetClose(params, requestId) {
+  cleanupA1Registries();
+  const publicHandle = String(params.asset_handle || "");
+  const transfer = a1Transfers.get(publicHandle);
+  if (!transfer) return { closed: false, reason: "not_found" };
+  a1Transfers.delete(publicHandle);
+  return withA1Request(requestId, transfer.tab_id, async () => a1ContentCall(transfer.tab_id, {
+    type: "zamery_browser_firefox_a1_asset_close",
+    asset_handle: transfer.content_asset_handle,
+    request_id: requestId,
+  }));
 }
 
 async function listContexts() {
@@ -651,4 +1364,15 @@ browser.runtime.onMessage.addListener((message, sender) => {
   return undefined;
 });
 
-browser.tabs.onRemoved.addListener((tabId) => ownedTabIds.delete(tabId));
+browser.tabs.onRemoved.addListener((tabId) => {
+  ownedTabIds.delete(tabId);
+  for (const [ref, asset] of assetV1Refs) {
+    if (asset.tab_id === tabId) assetV1Refs.delete(ref);
+  }
+  for (const [handle, transfer] of assetV1Transfers) {
+    if (transfer.tab_id === tabId) assetV1Transfers.delete(handle);
+  }
+  for (const [requestId, target] of assetV1RequestContexts) {
+    if (target.tab_id === tabId) assetV1RequestContexts.delete(requestId);
+  }
+});

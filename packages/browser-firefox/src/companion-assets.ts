@@ -7,6 +7,6 @@ export function firefoxCompanionManifestPath(kind: FirefoxCompanionManifestKind)
   return fileURLToPath(new URL(`../runtime/companion/${file}`, import.meta.url));
 }
 
-export function firefoxCompanionAssetPath(file: "background.js" | "content.js" | "popup.html" | "popup.js"): string {
+export function firefoxCompanionAssetPath(file: "asset-discovery-v1.js" | "asset-transfer-v1.js" | "background.js" | "content.js" | "popup.html" | "popup.js"): string {
   return fileURLToPath(new URL(`../runtime/companion/${file}`, import.meta.url));
 }

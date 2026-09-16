@@ -57,6 +57,7 @@ The current installer targets macOS Firefox Native Messaging locations. It write
 - Firefox actions are DOM-synthetic; they are not represented as trusted OS/browser input.
 - Partial/unknown mutation outcomes are preserved rather than blindly retried.
 - Restricted Firefox/internal pages can remain unavailable when content-script injection is blocked.
+- Optional browser-backed asset discovery/read keeps source URLs and credentials inside the provider while exposing only opaque refs and bounded transfer semantics to consumers.
 
 ## Compatibility
 
