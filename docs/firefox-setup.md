@@ -9,7 +9,13 @@ The companion is currently signed/unlisted (self-distributed), not a searchable 
 
 ## 1. Install the signed companion
 
-Use the signed `0.1.1` XPI from this repository's GitHub Release. Firefox may ask you to confirm the add-on installation and permissions.
+Use the signed `0.1.2` XPI attached to this repository's `v0.2.0` GitHub Release (`zamery-browser-companion-0.1.2.xpi`). Firefox may ask you to confirm the add-on installation and permissions.
+
+Verified SHA-256:
+
+```text
+2c4a5d54da3d3c7858a44d34c65b5facc02543248762e035a1151fc4ac2dbe48
+```
 
 Production extension ID:
 
