@@ -1,0 +1,18 @@
+{
+  "summary": {
+    "en-US": "Control your already-running Firefox through Zamery BrowserProvider with explicit local authorization and observable browser actions."
+  },
+  "description": {
+    "en-US": "Zamery Browser Companion connects your already-running Firefox to a locally installed Zamery Native Messaging host. It can inspect user-selected pages and perform bounded browser actions after the current local host session has been explicitly authorized. Broad page access is required for this browser-control function. The companion declares its Firefox data-collection categories in the manifest and does not contain remote advertising, analytics, or telemetry code."
+  },
+  "categories": [
+    "other"
+  ],
+  "homepage": {
+    "en-US": "https://github.com/maemreyo/zamery-browser"
+  },
+  "version": {
+    "license": "Apache-2.0",
+    "approval_notes": "The submitted extension files are human-readable source files; there is no minification or bundling step for the WebExtension. The primary data path is Firefox Native Messaging to the locally installed Zamery host. The user must explicitly authorize the current local native-host session before browser control is granted. The manifest declares browsingActivity, websiteContent, and websiteActivity as required data categories. The companion contains no remote advertising, analytics, or telemetry egress. Public privacy policy: https://github.com/maemreyo/zamery-browser/blob/main/PRIVACY.md"
+  }
+}
