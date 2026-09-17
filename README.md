@@ -76,6 +76,7 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Firefox setup](docs/firefox-setup.md)
 - [Security model](docs/security-model.md)
 - [Security policy](SECURITY.md)
+- [Privacy policy](PRIVACY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Examples](examples/README.md)
 
