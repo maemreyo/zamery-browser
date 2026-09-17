@@ -114,6 +114,9 @@ pnpm dlx web-ext@10.6.0 sign \
   --source-dir "$STAGED_SOURCE" \
   --artifacts-dir "$OUT_DIR" \
   --channel listed \
+  --approval-timeout 0 \
   --amo-metadata "$METADATA" \
   --api-key "$WEB_EXT_API_KEY" \
   --api-secret "$WEB_EXT_API_SECRET"
+
+printf 'AMO_SUBMISSION_STATUS=SUBMITTED_PENDING_REVIEW\n'

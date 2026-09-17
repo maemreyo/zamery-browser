@@ -42,10 +42,13 @@ Create AMO API credentials in the Mozilla Developer Hub and expose them only in 
 pnpm dlx web-ext@10.6.0 sign \
   --source-dir <staged-production-source> \
   --channel listed \
+  --approval-timeout 0 \
   --amo-metadata packages/browser-firefox/amo/metadata-listed.json \
   --api-key "$WEB_EXT_API_KEY" \
   --api-secret "$WEB_EXT_API_SECRET"
 ```
+
+For a listed submission, successful upload and validation do not imply immediate approval. `--approval-timeout 0` returns after submission instead of turning an expected manual-review wait into a CLI timeout failure. Treat the result as submitted/pending review until the Developer Hub shows the version accepted and public.
 
 The AMO listing must also identify that the add-on has a privacy policy and use the public policy at:
 
