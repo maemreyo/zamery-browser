@@ -19,6 +19,10 @@ codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@<tested-version>
 
 You also need the Firefox companion and the native host from `@zamery/browser-firefox` (see its README).
 
+## Codex recipe (needed for screenshots)
+
+In a tested Codex setup the model did not receive inline MCP images, so it guessed what a screenshot showed. `browser_screenshot` therefore also returns a local image file path, and the model must open it with its image viewer. Add [`codex/AGENTS.snippet.md`](codex/AGENTS.snippet.md) to your project's `AGENTS.md` (or install [`codex/skill/zamery-browser`](codex/skill/zamery-browser/SKILL.md) as a Codex skill). With it, a neutral visual question was answered correctly 3/3 against a real Firefox; without it, 0/2.
+
 ## How access works
 
 1. The agent calls `browser_status`. It always works, even before Firefox is connected or anything is shared, and says what to ask you.
