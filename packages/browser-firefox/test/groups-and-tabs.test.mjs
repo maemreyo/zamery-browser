@@ -196,6 +196,7 @@ describe("group writes", () => {
     assert.equal(first.result.group.member_context_ids.join(), "tab:2");
     const last = await ask("group_remove_tabs", { handle, context_ids: ["tab:2"] });
     assert.equal(last.result.group, null);
+    assert.equal(last.result.group_deleted, true);
     assert.equal((await ask("group_get", { handle })).error.reason, "outside_scope");
     assert.equal((await ask("snapshot", { context_id: "tab:1" })).ok, true, "directly granted tabs keep their authority");
     void c;

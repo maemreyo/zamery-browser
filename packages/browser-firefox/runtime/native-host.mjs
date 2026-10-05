@@ -39,6 +39,7 @@ const SAFE_RESULT_SCALAR_FIELDS = new Set([
   "ownership",
   "group_handle",
   "group_revision",
+  "group_deleted",
   "focused_context_id",
 ]);
 const SAFE_RESULT_LIST_FIELDS = new Set(["completed_substeps", "member_context_ids"]);

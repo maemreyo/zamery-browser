@@ -316,7 +316,7 @@ async function removeTabsFromGroup(params) {
       if (error?.reason !== "group_gone" && error?.reason !== "outside_scope") throw error;
     }
   }
-  return { outcome: "completed", group_handle: handle, group_revision: scoped.revision, group, completed_substeps: ["tabs_ungrouped"] };
+  return { outcome: "completed", group_handle: handle, group_revision: scoped.revision, group, group_deleted: group === null, completed_substeps: ["tabs_ungrouped"] };
 }
 
 async function moveGroup(params) {

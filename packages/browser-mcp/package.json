@@ -34,7 +34,8 @@
     "pretypecheck": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build",
-    "test": "tsc -p tsconfig.json && node --test \"test/*.test.mjs\""
+    "test": "tsc -p tsconfig.json && node --test \"test/*.test.mjs\"",
+    "live": "tsc -p tsconfig.json && node --test --test-concurrency=1 --test-timeout=240000 \"live/*.test.mjs\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

@@ -1314,7 +1314,7 @@ export class FirefoxBrowserProviderV2 implements
       operation: "group.remove-tabs",
       op: "group_remove_tabs",
       params: { handle: request.handle, context_ids: [...request.contextIds] },
-    }, options, (result) => (result.group || result.group_handle ? groupFromResult(result) : null));
+    }, options, (result) => (result.group_deleted === true || (!result.group && !result.group_handle) ? null : groupFromResult(result)));
   }
 
   moveTabGroup(request: BrowserTabGroupMoveRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1>> {

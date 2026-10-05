@@ -32,6 +32,8 @@ export function buildFirefoxNativeHostInstallPlan(options: {
   hostName?: string;
   homeDir?: string;
   nodePath?: string;
+  /** Absolute directory for the launcher, host copy and log. Defaults to ~/Library/Application Support/Zamery/browser-firefox. */
+  runtimeDir?: string;
 }): FirefoxNativeHostInstallPlan {
   const homeDir = options.homeDir ?? os.homedir();
   const hostName = options.hostName ?? DEFAULT_FIREFOX_NATIVE_HOST_NAME;
@@ -39,7 +41,7 @@ export function buildFirefoxNativeHostInstallPlan(options: {
   if (extensionIds.length === 0) throw new Error("at least one Firefox companion extension ID is required");
   if (new Set(extensionIds).size !== extensionIds.length) throw new Error("duplicate Firefox companion extension IDs are not allowed");
   const packageRuntimePath = fileURLToPath(new URL("../runtime/native-host.mjs", import.meta.url));
-  const runtimeDir = path.join(homeDir, "Library", "Application Support", "Zamery", "browser-firefox");
+  const runtimeDir = options.runtimeDir ?? path.join(homeDir, "Library", "Application Support", "Zamery", "browser-firefox");
   const binDir = path.join(runtimeDir, "bin");
   const installedHostPath = path.join(binDir, "native-host.mjs");
   const launcherPath = path.join(binDir, "native-host-launcher.sh");
@@ -72,6 +74,7 @@ export function installFirefoxNativeHost(options: {
   hostName?: string;
   homeDir?: string;
   nodePath?: string;
+  runtimeDir?: string;
   force?: boolean;
   dryRun?: boolean;
   /** Extra environment for the host launcher (for isolated acceptance runs). Keys must be shell-safe identifiers. */
