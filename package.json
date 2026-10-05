@@ -15,7 +15,8 @@
     "firefox:amo:submit": "bash scripts/firefox-amo-listed.sh submit",
     "test": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox test && pnpm --filter @zamery/browser-mcp test",
     "verify": "pnpm build && pnpm typecheck && pnpm test",
-    "release:tuple": "node scripts/release-tuple.mjs"
+    "release:tuple": "node scripts/release-tuple.mjs",
+    "live": "pnpm --filter @zamery/browser-mcp live"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",
