@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  BROWSER_ARTIFACT_LIMITS_V1,
+  BROWSER_ARTIFACT_PROVIDER_V1,
   BROWSER_AUTHORIZATION_PROVIDER_V1,
   BROWSER_CONTROL_PROVIDER_V1,
   BROWSER_CONTROL_RECEIPT_SCHEMA_V1,
@@ -15,6 +17,10 @@ import {
   type BrowserActionCapabilityIdV2,
   type BrowserActionSemanticsV2,
   type BrowserActionV2,
+  type BrowserArtifactBytesV1,
+  type BrowserArtifactDescriptorV1,
+  type BrowserArtifactProviderV1,
+  type BrowserScreenshotRequestV1,
   type BrowserAuthorizationActionV1,
   type BrowserAuthorizationDetailV1,
   type BrowserAuthorizationProviderV1,
@@ -62,6 +68,9 @@ import {
   type BrowserTargetProvenanceV2,
 } from "@zamery/browser-provider";
 
+import { createHash } from "node:crypto";
+
+import { ArtifactError, ArtifactStore } from "./artifact-store.js";
 import { normalizeAudienceId } from "./audience.js";
 import { isFirefoxBrokerTransportError, sendFirefoxBrokerRequest } from "./client.js";
 import { FirefoxSessionSelectionError, listLiveFirefoxSessions, selectFirefoxSession } from "./session.js";
@@ -166,6 +175,8 @@ interface RawAuthorizationStatus {
   granted_at?: unknown;
   expires_at?: unknown;
   grant_revision?: unknown;
+  grant_id?: unknown;
+  binding_token?: unknown;
   duration_mode?: unknown;
   duration_days?: unknown;
   scope_kind?: unknown;
@@ -489,6 +500,15 @@ export function controlErrorFrom(code: unknown, reason: unknown, message: unknow
     case "UNSUPPORTED_OPERATION":
     case "UNSUPPORTED_CAPABILITY":
       return make("UNSUPPORTED_CAPABILITY");
+    case "RESOURCE_BUSY":
+      return make("RESOURCE_BUSY");
+    case "ARTIFACT_EXPIRED":
+    case "ARTIFACT_SIZE_LIMIT":
+    case "ARTIFACT_INTEGRITY_MISMATCH":
+    case "ARTIFACT_NOT_FOUND":
+      return make(code);
+    case "BROWSER_DOCUMENT_CHANGED":
+      return make("STALE_OBSERVATION");
     case "INVALID_ARGUMENT":
       return make("INVALID_ARGUMENT");
     default:
@@ -519,8 +539,10 @@ export class FirefoxBrowserProviderV2 implements
   BrowserAuthorizationProviderV1,
   BrowserControlProviderV1,
   BrowserTabProviderV1,
-  BrowserTabGroupProviderV1 {
+  BrowserTabGroupProviderV1,
+  BrowserArtifactProviderV1 {
   readonly tabGroupProtocolVersion = BROWSER_TAB_GROUP_PROVIDER_V1;
+  readonly artifactProtocolVersion = BROWSER_ARTIFACT_PROVIDER_V1;
   readonly authorizationProtocolVersion = BROWSER_AUTHORIZATION_PROVIDER_V1;
   readonly controlProtocolVersion = BROWSER_CONTROL_PROVIDER_V1;
   readonly tabProtocolVersion = BROWSER_TAB_PROVIDER_V1;
@@ -530,6 +552,8 @@ export class FirefoxBrowserProviderV2 implements
   readonly #sessionsDir: string | undefined;
   readonly #audienceId: string;
   readonly #clientLabel: string | undefined;
+  readonly #artifactOptions: { root?: string; lifetimeMs?: number };
+  #artifacts: ArtifactStore | undefined;
   readonly #trackedRefs = new Map<string, TrackedRef>();
 
   constructor(options: FirefoxBrowserProviderOptions = {}) {
@@ -538,6 +562,15 @@ export class FirefoxBrowserProviderV2 implements
     this.#sessionsDir = options.sessionsDir;
     this.#audienceId = normalizeAudienceId(options.audienceId || options.clientId);
     this.#clientLabel = options.clientLabel;
+    this.#artifactOptions = {
+      ...(options.artifactRoot !== undefined ? { root: options.artifactRoot } : {}),
+      ...(options.artifactLifetimeMs !== undefined ? { lifetimeMs: options.artifactLifetimeMs } : {}),
+    };
+  }
+
+  #artifactStore(): ArtifactStore {
+    this.#artifacts ??= new ArtifactStore({ ...this.#artifactOptions, audienceId: this.#audienceId });
+    return this.#artifacts;
   }
 
   async declaration(): Promise<BrowserProviderDeclarationV2> {
@@ -877,6 +910,8 @@ export class FirefoxBrowserProviderV2 implements
           state: "disconnected",
           reason: error.code === "BROWSER_INSTANCE_AMBIGUOUS" ? "multiple_browser_sessions" : "no_browser_session",
           grantRevision: 0,
+          grantId: null,
+          bindingToken: null,
           mode: null,
           durationDays: null,
           issuedAt: null,
@@ -903,6 +938,8 @@ export class FirefoxBrowserProviderV2 implements
       state: authorizationStateFrom(auth),
       reason: nullableString(auth.reason),
       grantRevision: typeof auth.grant_revision === "number" ? auth.grant_revision : 0,
+      grantId: nullableString(auth.grant_id),
+      bindingToken: nullableString(auth.binding_token),
       mode: auth.duration_mode === "session" || auth.duration_mode === "fixed" ? auth.duration_mode : null,
       durationDays: nullableNumber(auth.duration_days),
       issuedAt: nullableNumber(auth.granted_at),
@@ -1289,8 +1326,173 @@ export class FirefoxBrowserProviderV2 implements
     }, options, (result) => ({ group: groupFromResult(result), focusedContextId: stringOrEmpty(result.focused_context_id) }));
   }
 
+
+  // ---- BrowserArtifactProviderV1 ---------------------------------------------------------------------------
+
+  async screenshot(
+    request: BrowserScreenshotRequestV1,
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserControlResultV1<BrowserArtifactDescriptorV1>> {
+    const failed = (error: BrowserControlErrorV1): BrowserControlResultV1<BrowserArtifactDescriptorV1> => ({ outcome: "not_started", error, replayed: false });
+    let session: FirefoxSessionReceipt;
+    try {
+      session = this.#controlSession(request);
+    } catch (error) {
+      return failed({ code: "HOST_MISSING", message: (error as Error).message });
+    }
+    const params: Record<string, unknown> = { context_id: request.contextId };
+    if (request.rect) params.rect = { ...request.rect };
+    if (request.scale !== undefined) params.scale = request.scale;
+    if (request.maxSide !== undefined) params.max_side = request.maxSide;
+    if (request.format) params.format = request.format;
+    if (request.quality !== undefined) params.quality = request.quality;
+
+    let raw: Record<string, unknown>;
+    try {
+      const response = await sendFirefoxBrokerRequest(session, "screenshot_capture", params, {
+        ...brokerOptions(options, this.#audienceId, request.requestId),
+        timeoutMs: 30_000,
+      });
+      if (!response.ok) return failed(controlErrorFrom(response.error?.code, response.error?.reason, response.error?.message));
+      raw = (response.result && typeof response.result === "object" ? response.result : {}) as Record<string, unknown>;
+    } catch (error) {
+      // A screenshot changes nothing in the browser, so a lost response is simply "not captured".
+      if (isFirefoxBrokerTransportError(error)) return failed({ code: "TRANSPORT_DISCONNECTED", message: error.message, reason: error.phase });
+      throw error;
+    }
+
+    const artifactId = stringOrEmpty(raw.artifact_id);
+    const remote = {
+      artifactId,
+      sha256: stringOrEmpty(raw.sha256),
+      byteSize: typeof raw.byte_size === "number" ? raw.byte_size : -1,
+      chunk: typeof raw.chunk_raw_bytes === "number" ? raw.chunk_raw_bytes : BROWSER_ARTIFACT_LIMITS_V1.maxChunkRawBytes,
+    };
+    if (!artifactId || remote.byteSize <= 0 || remote.byteSize > BROWSER_ARTIFACT_LIMITS_V1.maxEncodedBytes || remote.chunk > BROWSER_ARTIFACT_LIMITS_V1.maxChunkRawBytes) {
+      return failed({ code: "ARTIFACT_SIZE_LIMIT", message: "the companion returned an out-of-bounds artifact descriptor" });
+    }
+    const closeRemote = (): void => {
+      void sendFirefoxBrokerRequest(session, "artifact_close", { artifact_id: artifactId }, brokerOptions({}, this.#audienceId)).catch(() => undefined);
+    };
+
+    const chunks: Buffer[] = [];
+    let received = 0;
+    try {
+      for (let sequence = 0; ; sequence += 1) {
+        if (options.signal?.aborted) {
+          closeRemote();
+          return failed({ code: "PROVIDER_ERROR", message: "screenshot transfer was cancelled", reason: "cancelled" });
+        }
+        const response = await sendFirefoxBrokerRequest(
+          session,
+          "artifact_read_chunk",
+          { artifact_id: artifactId, sequence, offset: received },
+          { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
+        );
+        if (!response.ok) {
+          closeRemote();
+          return failed(controlErrorFrom(response.error?.code === "ARTIFACT_EXPIRED" ? "ARTIFACT_EXPIRED" : response.error?.code, response.error?.reason, response.error?.message));
+        }
+        const chunk = (response.result ?? {}) as Record<string, unknown>;
+        const data = Buffer.from(stringOrEmpty(chunk.data_base64), "base64");
+        const rawBytes = typeof chunk.raw_bytes === "number" ? chunk.raw_bytes : -1;
+        if (chunk.sequence !== sequence || chunk.offset !== received || rawBytes !== data.length || data.length > remote.chunk || received + data.length > remote.byteSize) {
+          closeRemote();
+          return failed({ code: "ARTIFACT_INTEGRITY_MISMATCH", message: "screenshot chunk framing was inconsistent", reason: "chunk_framing" });
+        }
+        chunks.push(data);
+        received += data.length;
+        if (chunk.eof === true) {
+          const terminal = (chunk.terminal ?? {}) as { bytes?: unknown; sha256?: unknown };
+          if (terminal.bytes !== remote.byteSize || terminal.sha256 !== remote.sha256 || received !== remote.byteSize) {
+            closeRemote();
+            return failed({ code: "ARTIFACT_INTEGRITY_MISMATCH", message: "terminal record does not match the descriptor", reason: "terminal_mismatch" });
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      closeRemote();
+      if (isFirefoxBrokerTransportError(error)) return failed({ code: "TRANSPORT_DISCONNECTED", message: error.message, reason: error.phase });
+      throw error;
+    }
+
+    const bytes = Buffer.concat(chunks);
+    if (createHash("sha256").update(bytes).digest("hex") !== remote.sha256) {
+      closeRemote();
+      return failed({ code: "ARTIFACT_INTEGRITY_MISMATCH", message: "assembled screenshot does not match its digest", reason: "digest_mismatch" });
+    }
+    closeRemote();
+
+    const rectRaw = (raw.captured_rect ?? {}) as Record<string, unknown>;
+    const mediaType = raw.media_type === "image/jpeg" ? "image/jpeg" : "image/png";
+    const descriptor: BrowserArtifactDescriptorV1 = {
+      artifactId,
+      kind: "screenshot",
+      mediaType,
+      width: typeof raw.width === "number" ? raw.width : 0,
+      height: typeof raw.height === "number" ? raw.height : 0,
+      byteSize: bytes.length,
+      sha256: remote.sha256,
+      contextId: stringOrEmpty(raw.context_id) || request.contextId,
+      documentId: nullableString(raw.document_id),
+      capturedRect: {
+        x: typeof rectRaw.x === "number" ? rectRaw.x : 0,
+        y: typeof rectRaw.y === "number" ? rectRaw.y : 0,
+        width: typeof rectRaw.width === "number" ? rectRaw.width : 0,
+        height: typeof rectRaw.height === "number" ? rectRaw.height : 0,
+      },
+      appliedScale: typeof raw.applied_scale === "number" ? raw.applied_scale : 1,
+      grantRevision: typeof raw.grant_revision === "number" ? raw.grant_revision : 0,
+      bindingToken: stringOrEmpty(raw.binding_token),
+      createdAt: typeof raw.created_at === "number" ? raw.created_at : Date.now(),
+      expiresAt: typeof raw.expires_at === "number" ? raw.expires_at : Date.now() + BROWSER_ARTIFACT_LIMITS_V1.defaultLifetimeMs,
+    };
+    try {
+      const stored = this.#artifactStore().write(descriptor, bytes);
+      return { outcome: "completed", receipt: this.#receipt(session, request.requestId, "screenshot.capture", "completed", { contextIds: [request.contextId] }), value: stored, replayed: false };
+    } catch (error) {
+      if (error instanceof ArtifactError) return failed({ code: error.code, message: error.message, reason: error.reason });
+      throw error;
+    }
+  }
+
+  /** Artifacts live only while the access binding they were captured under does. */
+  async #requireArtifactAuthority(descriptor: BrowserArtifactDescriptorV1, options: BrowserOperationOptionsV2): Promise<void> {
+    let detail: BrowserAuthorizationDetailV1;
+    try {
+      detail = await this.authorizationDetail({}, options);
+    } catch {
+      throw new ArtifactError("ARTIFACT_EXPIRED", "authority_unverifiable", "cannot verify that access to this artifact still exists");
+    }
+    if (detail.state !== "granted" || detail.bindingToken !== descriptor.bindingToken || !detail.actions.includes("capture")) {
+      this.#artifactStore().remove(descriptor.artifactId);
+      throw new ArtifactError("ARTIFACT_EXPIRED", "authority_ended", "the access this screenshot was captured under has ended");
+    }
+  }
+
+  async describeArtifact(artifactId: string): Promise<BrowserArtifactDescriptorV1> {
+    const descriptor = this.#artifactStore().describe(artifactId);
+    await this.#requireArtifactAuthority(descriptor, {});
+    return descriptor;
+  }
+
+  async readArtifact(artifactId: string, options: BrowserOperationOptionsV2 = {}): Promise<BrowserArtifactBytesV1> {
+    const store = this.#artifactStore();
+    const descriptor = store.describe(artifactId);
+    await this.#requireArtifactAuthority(descriptor, options);
+    const { data } = store.read(artifactId);
+    return { descriptor, data };
+  }
+
+  async closeArtifact(artifactId: string): Promise<void> {
+    this.#artifactStore().remove(artifactId);
+  }
+
   async close(): Promise<void> {
     this.#trackedRefs.clear();
+    // Teardown removes this consumer's artifacts; they are never a durable store.
+    try { this.#artifacts?.clear(); } catch { /* best effort */ }
   }
 }
 

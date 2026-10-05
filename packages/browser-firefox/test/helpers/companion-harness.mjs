@@ -151,6 +151,7 @@ export function createFakeBrowser(options = {}) {
       async captureTab(tabId, opts) {
         requireTab(tabId);
         state.captureCalls = [...(state.captureCalls || []), { tabId, opts: clone(opts) }];
+        if (typeof state.captureFor === "function") return state.captureFor(opts);
         return state.captureResult ?? "data:image/png;base64,iVBORw0KGgo=";
       },
       async group({ tabIds, groupId, createProperties }) {

@@ -18,3 +18,4 @@ export {
   installFirefoxNativeHost,
   type FirefoxNativeHostInstallPlan,
 } from "./install.js";
+export { ArtifactError, ArtifactStore, defaultArtifactRoot } from "./artifact-store.js";

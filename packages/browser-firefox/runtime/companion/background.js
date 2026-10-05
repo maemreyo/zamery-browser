@@ -6,8 +6,6 @@ const MAX_SEEN_AUDIENCES = 16;
 const SEEN_AUDIENCE_TTL_MS = 10 * 60 * 1000;
 const AUTHORITY_TICK_MS = 30_000;
 const CONSENT_LAST_SEEN_PERSIST_MS = 5 * 60 * 1000;
-const MAX_CAPTURE_PIXELS = 8_000_000;
-const DEFAULT_MAX_ENCODED_BYTES = 8 * 1024 * 1024;
 const PRIMARY_DOCUMENT_TARGET = { frameId: 0 };
 const A1_DEVELOPMENT_EXTENSION_ID = "zamery-live-browser-v0c@zamery.local";
 const A1_REGISTRY_TTL_MS = 5 * 60 * 1000;
@@ -101,6 +99,7 @@ function originForUrl(url) {
 // ---- consent persistence & authority lifecycle -----------------------------------------------
 
 function clearCachesForAuthorityChange() {
+  if (typeof dropAllArtifacts === "function") dropAllArtifacts();
   completedRequests.clear();
   assetV1Refs.clear();
   assetV1Transfers.clear();
@@ -279,6 +278,7 @@ function authorizationStatus(options = {}) {
     granted_host_session_id: granted ? binding.hostSessionId : null,
     browser_run_epoch: browserRunEpoch,
     grant_id: granted || (detail === "popup" && consent) ? consent.grantId : null,
+    binding_token: granted ? binding.instanceId : null,
     grant_revision: consent ? consent.grantRevision : 0,
     granted_at: consent ? consent.issuedAt : null,
     expires_at: consent ? consent.expiresAt : null,
@@ -641,6 +641,7 @@ function featureSummary() {
   return {
     tab_groups_api: typeof groupsApiAvailable === "function" ? groupsApiAvailable() : false,
     capture_tab_api: typeof browser.tabs.captureTab === "function",
+    screenshots: typeof browser.tabs.captureTab === "function",
     control: true,
     tabs: true,
   };
@@ -664,7 +665,10 @@ async function executeRequest(message) {
     const handled = await executeExtendedRequest(op, params, message);
     if (handled !== undefined) return handled.value;
   }
-  if (op === "screenshot_probe") return screenshotProbe(params);
+  if (typeof executeArtifactRequest === "function") {
+    const handled = await executeArtifactRequest(op, params, message);
+    if (handled !== undefined) return handled.value;
+  }
   if (op === "asset_capabilities_v1") return assetCapabilitiesV1(params);
   if (op === "asset_discover_v1") return assetDiscoverV1(params);
   if (op === "asset_open_v1") return assetOpenV1(params, message.id);
@@ -1757,59 +1761,6 @@ async function closeOwnedTab(params) {
   if (!ownedTabIds.has(tabId)) throw newError("CONTEXT_NOT_OWNED", "refusing to close user-owned tab");
   await browser.tabs.remove(tabId);
   return { outcome: "completed" };
-}
-
-async function screenshotProbe(params) {
-  const contextId = String(params.context_id || "");
-  const { tabId } = await contextAuthorization(contextId, "capture");
-  if (typeof browser.tabs.captureTab !== "function") {
-    return { capability_ready: false, reason: "captureTab_unavailable" };
-  }
-
-  const ping = await ensureContent(tabId).catch(() => null);
-  const viewportWidth = Number(ping?.viewport_width || 0);
-  const viewportHeight = Number(ping?.viewport_height || 0);
-  const rect = params.rect && typeof params.rect === "object" ? params.rect : undefined;
-  const scale = Number(params.scale ?? 1);
-  const width = Number(rect?.width ?? viewportWidth);
-  const height = Number(rect?.height ?? viewportHeight);
-  const requestedPixels = Math.ceil(width * height * scale * scale);
-  if (!Number.isFinite(scale) || scale <= 0 || scale > 1 || !Number.isFinite(requestedPixels) || requestedPixels <= 0 || requestedPixels > MAX_CAPTURE_PIXELS) {
-    throw newError("SCREENSHOT_PIXEL_BUDGET_EXCEEDED", `capture pixel budget exceeded: ${requestedPixels}`);
-  }
-
-  const options = { format: params.format === "jpeg" ? "jpeg" : "png", scale };
-  if (rect) options.rect = {
-    x: Number(rect.x || 0),
-    y: Number(rect.y || 0),
-    width,
-    height,
-  };
-  if (options.format === "jpeg") options.quality = Math.max(0, Math.min(100, Number(params.quality ?? 85)));
-
-  const startedAt = performance.now();
-  const dataUrl = await browser.tabs.captureTab(tabId, options);
-  const captureDurationMs = Math.round(performance.now() - startedAt);
-  const encoded = String(dataUrl).split(",", 2)[1] || "";
-  const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
-  const encodedBytes = Math.max(0, Math.floor(encoded.length * 3 / 4) - padding);
-  const maxEncodedBytes = Math.max(1, Number(params.max_encoded_bytes ?? DEFAULT_MAX_ENCODED_BYTES));
-
-  return {
-    exact_tab_targeting_api: "tabs.captureTab",
-    context_id: contextId,
-    requested_pixels: requestedPixels,
-    encoded_bytes_after_capture: encodedBytes,
-    encoded_within_provider_limit: encodedBytes <= maxEncodedBytes,
-    forwarded_image_bytes: false,
-    capture_duration_ms: captureDurationMs,
-    underlying_capture_abortable: false,
-    encoded_allocation_hard_bounded_before_capture: false,
-    capability_ready: false,
-    reason: encodedBytes > maxEncodedBytes
-      ? "encoded_result_exceeded_limit_after_Firefox_already_materialized_data_url"
-      : "Firefox_captureTab_has_no_proven_abort_or_preallocation_encoded_byte_bound",
-  };
 }
 
 // ---- popup (trusted UI) -------------------------------------------------------------------------------

@@ -129,6 +129,18 @@ function guidanceForCode(code: string, r: string): string[] {
       return ["The action may or may not have happened. Do NOT retry with a new request_id. Call browser_mutation_status with the same request_id, then inspect the page."];
     case "PARTIALLY_APPLIED":
       return ["Some steps happened. The result lists them; do not assume a rollback. Inspect the current state."];
+    case "ARTIFACT_EXPIRED":
+      return ["That screenshot expired (time limit, or sharing ended/changed). Capture a new one with browser_screenshot."];
+    case "ARTIFACT_NOT_FOUND":
+      return ["Unknown screenshot artifact. Capture a new one with browser_screenshot."];
+    case "ARTIFACT_SIZE_LIMIT":
+      return ["The image is too large. Capture a smaller rect or use jpeg."];
+    case "ARTIFACT_INTEGRITY_MISMATCH":
+      return ["The screenshot could not be verified and was discarded. Capture it again."];
+    case "RESOURCE_BUSY":
+      return ["Another capture is running. Wait a moment and retry."];
+    case "INVALID_ARGUMENT":
+      return ["Check the arguments: rect sides are at most 4096 CSS px."];
     case "UNSUPPORTED_CAPABILITY":
       return ["This Firefox build or companion does not support that operation."];
     default:

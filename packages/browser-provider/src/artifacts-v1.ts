@@ -32,10 +32,15 @@ export interface BrowserScreenshotRectV1 {
 export interface BrowserScreenshotRequestV1 extends BrowserControlTargetV1 {
   requestId: string;
   contextId: string;
-  /** Page-relative CSS pixels. Required: a bounded rectangle makes the work bounded. */
-  rect: BrowserScreenshotRectV1;
+  /**
+   * Page-relative CSS pixels. Omitted means the viewport as the provider observes it at capture time
+   * (scroll position and size are read from the page, never guessed). Always bounded by the limits above.
+   */
+  rect?: BrowserScreenshotRectV1;
   /** (0, 1]. Default 1. */
   scale?: number;
+  /** Shrink so the longest output side is at most this many pixels (1..4096). Applied on top of `scale`. */
+  maxSide?: number;
   format?: "png" | "jpeg";
   /** 1..100, jpeg only. */
   quality?: number;
@@ -52,7 +57,12 @@ export interface BrowserArtifactDescriptorV1 {
   contextId: string;
   /** Document the pixels came from. A later navigation makes this historical, not current. */
   documentId: string | null;
+  /** The CSS rectangle that was captured and the scale that was applied, as measured, not as requested. */
+  capturedRect: BrowserScreenshotRectV1;
+  appliedScale: number;
   grantRevision: number;
+  /** Opaque token of the live access binding the pixels were captured under. Ending or replacing it expires the artifact. */
+  bindingToken: string;
   createdAt: number;
   expiresAt: number;
 }

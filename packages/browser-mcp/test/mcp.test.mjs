@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
+import fs from "node:fs";
+
 import { connect, connectStack, textOf } from "./helpers.mjs";
+import { pngDataUrl, quadrantPng } from "../../browser-firefox/test/helpers/png.mjs";
+
+const JPEG = fs.readFileSync(new URL("../../browser-firefox/test/fixtures/quadrants.jpg", import.meta.url));
 
 const open = [];
 afterEach(async () => { while (open.length) await open.pop().close(); });
@@ -18,7 +23,7 @@ describe("discovery works before Firefox or any grant exists", () => {
     const mcp = track(await connect({ provider: emptyProvider }));
     const { tools } = await mcp.client.listTools();
     const names = tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, ["browser_click", "browser_contexts", "browser_fill", "browser_group", "browser_groups", "browser_handoff", "browser_key", "browser_mutation_status", "browser_snapshot", "browser_status", "browser_tab", "browser_type"].filter((name) => names.includes(name)));
+    assert.deepEqual(names, ["browser_artifact_read", "browser_click", "browser_contexts", "browser_fill", "browser_group", "browser_groups", "browser_handoff", "browser_key", "browser_mutation_status", "browser_screenshot", "browser_snapshot", "browser_status", "browser_tab", "browser_type"]);
     for (const required of ["browser_status", "browser_contexts", "browser_snapshot", "browser_click", "browser_fill", "browser_type", "browser_key", "browser_handoff", "browser_mutation_status"]) {
       assert.ok(names.includes(required), required);
     }
@@ -213,5 +218,84 @@ describe("single authorized tab vertical slice (full stack)", () => {
     assert.equal(closed.isError, undefined, textOf(closed));
     const refused = await stack.call("browser_tab", { action: "close_owned", context_id: "tab:1" });
     assert.equal(refused.isError, true);
+  });
+});
+
+describe("screenshots reach the model as bounded images", () => {
+  async function shotStack() {
+    const stack = track(await connectStack());
+    stack.stack.company.state.captureFor = (opts) => (opts.format === "jpeg" ? `data:image/jpeg;base64,${JPEG.toString("base64")}` : pngDataUrl(quadrantPng(480, 320)));
+    await stack.grant();
+    return stack;
+  }
+
+  it("returns an ImageContent block plus compact structured metadata (no base64 in JSON)", async () => {
+    const stack = await shotStack();
+    const result = await stack.call("browser_screenshot", { context_id: "tab:1" });
+    assert.equal(result.isError, undefined, textOf(result));
+    const image = result.content.find((part) => part.type === "image");
+    assert.ok(image, "an image block is returned");
+    assert.equal(image.mimeType, "image/jpeg");
+    assert.deepEqual(Buffer.from(image.data, "base64"), JPEG);
+    assert.equal(result.structuredContent.image_included, true);
+    assert.match(result.structuredContent.artifact_id, /^art_/);
+    assert.ok(!JSON.stringify(result.structuredContent).includes(image.data.slice(0, 40)));
+    assert.match(textOf(result), /not proof of the page's current state/);
+    const call = stack.stack.company.state.captureCalls.at(-1).opts;
+    assert.equal(call.format, "jpeg");
+    assert.deepEqual(call.rect, { x: 0, y: 0, width: 800, height: 600 }, "viewport rect comes from the observed page geometry");
+    assert.ok(call.scale <= 1 && call.scale > 0);
+  });
+
+  it("does not inline an image over the limit and says why", async () => {
+    const stack = track(await connectStack());
+    // Rebuild the server with a tiny inline cap.
+    await stack.close();
+    open.length = 0;
+    const small = track(await (async () => {
+      const { createFirefoxBrowserProviderV2, createFirefoxRequestId } = await import("@zamery/browser-firefox");
+      const { startStack } = await import("../../browser-firefox/test/helpers/stack-harness.mjs");
+      const path = await import("node:path");
+      const s = await startStack();
+      s.company.state.captureFor = () => `data:image/jpeg;base64,${JPEG.toString("base64")}`;
+      const mcp = await connect({
+        maxInlineImageBytes: 100,
+        requestIdFactory: () => createFirefoxRequestId(),
+        provider: () => createFirefoxBrowserProviderV2({ sessionsDir: path.join(s.roots.runtimeDir, "sessions"), audienceId: "mcp-test-consumer-0001", artifactRoot: path.join(s.roots.root, "art") }),
+      });
+      await mcp.call("browser_status");
+      await s.company.popup({ type: "zamery_browser_firefox_grant", audience_id: "mcp-test-consumer-0001", tab_ids: [1], duration: { mode: "session" } });
+      return { ...mcp, async close() { await mcp.close(); await s.stop(); } };
+    })());
+    const result = await small.call("browser_screenshot", { context_id: "tab:1" });
+    assert.equal(result.content.some((part) => part.type === "image"), false);
+    assert.equal(result.structuredContent.image_included, false);
+    assert.match(textOf(result), /over the 100-byte inline limit/);
+  });
+
+  it("reads an artifact back as metadata or image, and refuses it after sharing ends", async () => {
+    const stack = await shotStack();
+    const shot = await stack.call("browser_screenshot", { context_id: "tab:1", include_image: false });
+    assert.equal(shot.content.some((part) => part.type === "image"), false);
+    const id = shot.structuredContent.artifact_id;
+    const meta = await stack.call("browser_artifact_read", { artifact_id: id });
+    assert.equal(meta.structuredContent.byte_size, JPEG.length);
+    const image = await stack.call("browser_artifact_read", { artifact_id: id, mode: "bounded_image" });
+    assert.equal(image.content.find((part) => part.type === "image").mimeType, "image/jpeg");
+    await stack.stack.company.popup({ type: "zamery_browser_firefox_revoke" });
+    const gone = await stack.call("browser_artifact_read", { artifact_id: id, mode: "bounded_image" });
+    assert.equal(gone.isError, true);
+    assert.equal(gone.structuredContent.error.code, "ARTIFACT_EXPIRED");
+    assert.match(textOf(gone), /Capture a new one/);
+  });
+
+  it("rejects malformed artifact ids and out-of-range rects at the schema", async () => {
+    const stack = await shotStack();
+    for (const args of [{ artifact_id: "../../etc/passwd" }, { artifact_id: "art_short" }]) {
+      const result = await stack.call("browser_artifact_read", args).catch((error) => ({ isError: true, thrown: error }));
+      assert.equal(result.isError, true);
+    }
+    const bad = await stack.call("browser_screenshot", { context_id: "tab:1", rect: { x: 0, y: 0, width: 99999, height: 10 } }).catch((error) => ({ isError: true, thrown: error }));
+    assert.equal(bad.isError, true);
   });
 });

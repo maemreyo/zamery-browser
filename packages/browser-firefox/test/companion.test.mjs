@@ -65,7 +65,7 @@ describe("authorization scope (single tab)", () => {
 
     for (const [op, params] of [
       ["snapshot", { context_id: "tab:2" }],
-      ["screenshot_probe", { context_id: "tab:2" }],
+      ["screenshot_capture", { context_id: "tab:2" }],
       ["asset_capabilities_v1", { context_id: "tab:2" }],
       ["asset_discover_v1", { context_id: "tab:2" }],
       ["act", { context_id: "tab:2", ref: "r1.x", action: "click" }],

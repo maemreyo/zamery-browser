@@ -25,7 +25,7 @@
   ],
   "incognito": "not_allowed",
   "background": {
-    "scripts": ["policy.js", "background.js", "control-ops.js", "start.js"],
+    "scripts": ["policy.js", "background.js", "control-ops.js", "artifacts.js", "start.js"],
     "persistent": true
   },
   "browser_action": {

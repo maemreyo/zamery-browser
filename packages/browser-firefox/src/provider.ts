@@ -220,6 +220,9 @@ export interface FirefoxBrowserProviderOptions {
   audienceId?: string;
   /** Used as the audience when no `audienceId` is given (for example Pi's per-process `clientId`). */
   clientId?: string;
+  /** Managed screenshot artifact root. Defaults to ~/Library/Application Support/Zamery/browser-firefox/artifacts/screenshots. */
+  artifactRoot?: string;
+  artifactLifetimeMs?: number;
   /** Informational label shown to the user when they choose which local agent to share with. Never authority. */
   clientLabel?: string;
 }

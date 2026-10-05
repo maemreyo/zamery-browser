@@ -6,10 +6,12 @@ import { z } from "zod";
 
 import {
   BROWSER_TAB_GROUP_COLORS_V1,
+  isBrowserArtifactProviderV1,
   isBrowserAuthorizationProviderV1,
   isBrowserControlProviderV1,
   isBrowserTabGroupProviderV1,
   isBrowserTabProviderV1,
+  type BrowserArtifactDescriptorV1,
   type BrowserAuthorizationDetailV1,
   type BrowserControlResultV1,
   type BrowserControlStateV1,
@@ -27,6 +29,8 @@ export interface BrowserMcpServerOptions {
   /** The provider, or a factory called lazily on the first tool call (after MCP initialize completed). */
   provider: BrowserProviderV2 | ((context: { clientName: string | undefined }) => BrowserProviderV2 | Promise<BrowserProviderV2>);
   version: string;
+  /** Largest image returned inline to the model, in bytes. Default 300 KiB. */
+  maxInlineImageBytes?: number;
   /** Mint a stable id for one logical mutation. Defaults to a UUID. */
   requestIdFactory?: () => string;
   now?: () => number;
@@ -755,6 +759,124 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         ok: true, request_id: requestId, outcome: "completed", replayed: result.replayed, group: group ? groupJson(group) : null, completed_substeps: [...result.receipt.completedSubsteps],
       });
     }, "browser_group"),
+  );
+
+
+  // ---- screenshots and artifacts -------------------------------------------------------------------------
+
+  const maxInlineBytes = options.maxInlineImageBytes ?? 300 * 1024;
+  const SHOT_ATTEMPTS = [
+    { maxSide: 1600, quality: 80 },
+    { maxSide: 1280, quality: 65 },
+    { maxSide: 960, quality: 50 },
+  ] as const;
+
+  const artifactJson = (d: BrowserArtifactDescriptorV1): Json => ({
+    artifact_id: d.artifactId,
+    media_type: d.mediaType,
+    width: d.width,
+    height: d.height,
+    byte_size: d.byteSize,
+    sha256: d.sha256,
+    context_id: d.contextId,
+    document_id: d.documentId,
+    captured_rect: d.capturedRect,
+    applied_scale: d.appliedScale,
+    created_at: new Date(d.createdAt).toISOString(),
+    expires_at: new Date(d.expiresAt).toISOString(),
+  });
+
+  const SHOT_CAVEAT = "A screenshot shows what was visible at capture time (it may include private content) and is not proof of the page's current state.";
+
+  server.registerTool(
+    "browser_screenshot",
+    {
+      title: "Screenshot a shared tab",
+      description:
+        "Capture the visible viewport (or a CSS-pixel rect) of a shared tab and return the image so you can look at it. Output is bounded (longest side <= 1600 px, small JPEG). The screenshot is stored as a short-lived artifact (artifact_id) that expires when sharing ends. Needs the user to have allowed screenshots.",
+      inputSchema: {
+        context_id: CONTEXT_ID,
+        rect: z.object({ x: z.number().min(0), y: z.number().min(0), width: z.number().int().min(1).max(4096), height: z.number().int().min(1).max(4096) }).optional()
+          .describe("Page-relative CSS pixels. Omit for the current viewport."),
+        format: z.enum(["jpeg", "png"]).optional().describe("Default jpeg (smaller). png is lossless but may be too large to show inline."),
+        include_image: z.boolean().optional().describe("Default true. Set false to only get the artifact metadata."),
+        request_id: REQUEST_ID,
+        browser_instance_id: INSTANCE_ID,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    ({ context_id, rect, format, include_image, request_id, browser_instance_id }) => withTarget(browser_instance_id, async (provider, target) => {
+      if (!isBrowserArtifactProviderV1(provider)) return errorResult("browser_screenshot", { code: "UNSUPPORTED_CAPABILITY", message: "this provider has no screenshot interface" });
+      const wantImage = include_image !== false;
+      const fmt = format ?? "jpeg";
+      const attempts = fmt === "jpeg" && wantImage ? SHOT_ATTEMPTS : [{ maxSide: 1600, quality: 85 }] as const;
+      let last: BrowserControlResultV1<BrowserArtifactDescriptorV1> | undefined;
+      for (const attempt of attempts) {
+        const result = await provider.screenshot({
+          ...target,
+          requestId: request_id ?? newRequestId(),
+          contextId: context_id,
+          ...(rect ? { rect } : {}),
+          format: fmt,
+          ...(fmt === "jpeg" ? { quality: attempt.quality } : {}),
+          ...(wantImage ? { maxSide: attempt.maxSide } : {}),
+        });
+        if (result.outcome !== "completed") return describeOutcome(result, "n/a", "screenshot");
+        last = result;
+        if (!wantImage || result.value.byteSize <= maxInlineBytes) break;
+        if (attempt !== attempts[attempts.length - 1]) await provider.closeArtifact(result.value.artifactId);
+      }
+      const d = (last as Extract<typeof last, { outcome: "completed" }>).value;
+      const inline = wantImage && d.byteSize <= maxInlineBytes;
+      const lines = [
+        `Screenshot of ${context_id}: ${d.width}x${d.height} ${d.mediaType}, ${d.byteSize} bytes (captured CSS rect ${d.capturedRect.x},${d.capturedRect.y} ${d.capturedRect.width}x${d.capturedRect.height}).`,
+        `artifact_id: ${d.artifactId} (expires ${new Date(d.expiresAt).toISOString()}; ends earlier if sharing ends)`,
+        wantImage && !inline ? `The image is ${d.byteSize} bytes, over the ${maxInlineBytes}-byte inline limit, so it is not shown. Capture a smaller rect.` : "",
+        SHOT_CAVEAT,
+      ].filter(Boolean);
+      const content: CallToolResult["content"] = [{ type: "text", text: lines.join("\n") }];
+      if (inline) {
+        const bytes = await provider.readArtifact(d.artifactId);
+        content.push({ type: "image", data: Buffer.from(bytes.data).toString("base64"), mimeType: d.mediaType });
+      }
+      return { content, structuredContent: { ok: true, ...artifactJson(d), image_included: inline } };
+    }, "browser_screenshot"),
+  );
+
+  server.registerTool(
+    "browser_artifact_read",
+    {
+      title: "Read a screenshot artifact",
+      description: "Return metadata or, for bounded_image, the image of an artifact from browser_screenshot, if its access is still valid. Artifacts expire after about 30 minutes or as soon as the user stops sharing.",
+      inputSchema: {
+        artifact_id: z.string().regex(/^art_[0-9a-f]{32}$/),
+        mode: z.enum(["metadata", "bounded_image"]).default("metadata"),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ artifact_id, mode }) => {
+      try {
+        const provider = await getProvider();
+        if (!isBrowserArtifactProviderV1(provider)) return errorResult("browser_artifact_read", { code: "UNSUPPORTED_CAPABILITY", message: "this provider has no artifact interface" });
+        const read = await provider.readArtifact(artifact_id);
+        const d = read.descriptor;
+        if (mode === "metadata") {
+          return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}, ${d.byteSize} bytes. ${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false });
+        }
+        if (d.byteSize > maxInlineBytes) {
+          return ok(`artifact ${d.artifactId} is ${d.byteSize} bytes, over the ${maxInlineBytes}-byte inline limit. Capture a smaller area with browser_screenshot.`, { ok: true, ...artifactJson(d), image_included: false });
+        }
+        return {
+          content: [
+            { type: "text", text: `artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}. ${SHOT_CAVEAT}` },
+            { type: "image", data: Buffer.from(read.data).toString("base64"), mimeType: d.mediaType },
+          ],
+          structuredContent: { ok: true, ...artifactJson(d), image_included: true },
+        };
+      } catch (error) {
+        return errorResult("browser_artifact_read", codedError(error));
+      }
+    },
   );
 
   return {

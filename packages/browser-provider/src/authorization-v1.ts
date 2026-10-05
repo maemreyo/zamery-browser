@@ -32,6 +32,10 @@ export interface BrowserAuthorizationDetailV1 {
   /** Why access is not granted, e.g. `user_revoked`, `authorization_expired`, `restart`, `bound_to_other_consumer`. */
   reason: string | null;
   grantRevision: number;
+  /** Stable id of the user's consent. Survives rebinds of a fixed-duration grant. */
+  grantId: string | null;
+  /** Opaque; changes whenever the live access binding is replaced (revoke, restart, rebind, new grant). */
+  bindingToken: string | null;
   /** `session` ends with the live host session; `fixed` keeps its deadline across restarts but needs explicit rebind. */
   mode: "session" | "fixed" | null;
   durationDays: number | null;
