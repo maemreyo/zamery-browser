@@ -843,17 +843,19 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
       }
       const d = (last as Extract<typeof last, { outcome: "completed" }>).value;
       const inline = wantImage && d.byteSize <= maxInlineBytes;
+      let localPath: string | undefined;
+      if (local_file !== false && canMaterialize(provider)) {
+        localPath = (await provider.materializeArtifact(d.artifactId)).path;
+      }
       const lines = [
+        ...(localPath
+          ? [`LOOK AT THE IMAGE: some hosts do not show inline MCP images to the model. Open this file with your image viewer tool (for example view_image) before describing what the screenshot shows. If you have not seen the pixels, you do not know them: do not guess colours or layout. local file (removed shortly after sharing ends): ${localPath}`]
+          : []),
         `Screenshot of ${context_id}: ${d.width}x${d.height} ${d.mediaType}, ${d.byteSize} bytes (captured CSS rect ${d.capturedRect.x},${d.capturedRect.y} ${d.capturedRect.width}x${d.capturedRect.height}).`,
         `artifact_id: ${d.artifactId} (expires ${new Date(d.expiresAt).toISOString()}; ends earlier if sharing ends)`,
         wantImage && !inline ? `The image is ${d.byteSize} bytes, over the ${maxInlineBytes}-byte inline limit, so it is not shown. Capture a smaller rect.` : "",
         SHOT_CAVEAT,
       ].filter(Boolean);
-      let localPath: string | undefined;
-      if (local_file !== false && canMaterialize(provider)) {
-        localPath = (await provider.materializeArtifact(d.artifactId)).path;
-        lines.push(`local file (open with an image viewer; it is removed shortly after sharing ends): ${localPath}`);
-      }
       const content: CallToolResult["content"] = [{ type: "text", text: lines.join("\n") }];
       if (inline) {
         const bytes = await provider.readArtifact(d.artifactId);

@@ -36,7 +36,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 6 | Restart / rebind semantics | ✅ | Live extension reload + Firefox restart. |
 | 7 | Takeover/resume incl. MFA, manual click/navigation, SPA, focus switch, popup, same-node edit | ✅ | Live: credential hand-off, **trusted** (Marionette-synthesized) key and click, manual navigation, SPA staleness, origin change, tab switch, page popup not shared. Same-node edit detection covered in the VM only (the interaction generation). Native OS dialogs/passkeys are out of scope. |
 | 8 | Tab lifecycle: create/navigate/reload/close owned, user close refused, no duplicate create on recovery | ✅ | Live (repeat of the same request id opens one tab). |
-| 9 | Screenshot + model vision | 🟡 | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. Real Codex 0.160.0 read a screenshot correctly through a **local file path** in a fake-Firefox run; an **inline MCP image block did not reach the model** in this user's setup (see below). Live-Firefox + Codex end-to-end: see "Codex runs". DPR ≠ 1, scrolled-viewport and resize races not live-tested (headless DPR is 1). |
+| 9 | Screenshot + model vision | ❌ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. Real Codex 0.160.0 read a screenshot correctly through a **local file path** in a fake-Firefox run; an **inline MCP image block did not reach the model** in this user's setup (see below). Live-Firefox + Codex with default behaviour: wrong answer 2/2 (see "Codex runs"). DPR ≠ 1, scrolled-viewport and resize races not live-tested (headless DPR is 1). |
 | 10 | MCP / native-host failure recovery | ✅ | MCP child SIGKILL → new child keeps the grant, observations fresh; host killed mid-action → `outcome_unknown`, secret never on disk; extension reload live. Codex-host restart recovery is not measured (it depends on the Codex surface). |
 | 11 | Revoke during queued / read / transfer / mutation | ✅ | Companion VM + full-stack tests (queued write not dispatched, read discarded, mutation reports safe status, artifact dropped). |
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
@@ -51,9 +51,10 @@ Method: `codex exec` with the MCP server added only through `-c mcp_servers.…`
 
 1. **Inline MCP `ImageContent` only:** the tools ran and returned the image block, but the model answered *red, green, blue, yellow* — the classic guess, wrong for two quadrants. In this setup (Codex → local ChatGPT-web bridge) the inline image did not reach the model. A control with the same JPEG attached through `codex exec -i` was answered correctly, so the model itself can see images.
 2. **Local file path in the tool result:** with `local_file=true`, Codex opened the file with its own image viewer and answered correctly (*red, blue, green, yellow*) — not the classic guess.
-3. After that finding `browser_screenshot` returns both the inline image and a local file path by default; a default-parameters run answered correctly.
+3. After that finding `browser_screenshot` returns both the inline image and a local file path by default (and, later, a first line telling the model to open the file before describing it). A fake-Firefox run with these defaults answered correctly once.
+4. **Against the live isolated Firefox, with the shipped defaults and a neutral prompt, Codex answered the heading and URL correctly (from page text) but guessed the colours (*red, green, blue, yellow*) in two runs out of two** — it called `browser_artifact_read` but never opened the file with an image viewer. Only when the prompt itself told it to open the returned local file did it read the pixels. So the model-vision acceptance row **fails** for this Codex build/bridge with default behaviour; it is a host/model-behaviour limitation, not a Zamery capture bug (the captured pixels are verified in the live suite).
 
-Consequence: do not rely on inline MCP images alone for a given host/bridge; acceptance must be repeated for each Codex surface/build that is claimed. Live-Firefox + Codex run: see the dated addendum below when it completes.
+Consequence: do not rely on inline MCP images alone for a given host/bridge, and do not claim model vision for a Codex surface/build until the visual-question run passes there with the shipped defaults. Candidate follow-ups: a host-specific recipe in the setup docs (prompt/skill telling the agent to open the returned file), or testing other Codex surfaces/builds that forward MCP image blocks.
 
 ## Release-candidate tuple
 
@@ -66,7 +67,7 @@ Current source tuple (unsigned): packages provider 0.2.0 / firefox 0.2.0 / mcp 0
 1. A Mozilla-signed protocol-2 companion (AMO credentials are not available in this environment).
 2. A clean-machine install of the published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
 3. A run against the user's real, already-authenticated Firefox profile with the signed companion.
-4. A tested Codex surface/build where the screenshot visual question passes with the shipped tool defaults.
+4. A tested Codex surface/build where the screenshot visual question passes with the shipped tool defaults (currently failing, see above).
 
 ## Known limitations of the preview scope
 
