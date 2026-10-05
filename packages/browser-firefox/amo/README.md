@@ -2,11 +2,11 @@
 
 This directory contains the metadata and release checklist for the first public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current candidate: `0.1.3` with stable Gecko ID `zamery-browser-firefox@zamery.local`.
+Current candidate: `0.2.0` (companion protocol 2: scoped consent, tab groups, screenshots) with stable Gecko ID `zamery-browser-firefox@zamery.local`.
 
-## Why 0.1.3
+## Why 0.2.0
 
-The currently distributed Mozilla-signed companion is `0.1.2` on the unlisted/self-distributed channel. The first listed build uses a higher version so existing self-distributed installations can move forward to the public AMO release rather than attempting to reuse an already-distributed version.
+The currently distributed Mozilla-signed companion is `0.1.2` on the unlisted/self-distributed channel. The companion changed its native wire protocol (1 → 2) and requests the new `tabGroups` permission, so it ships as a new minor version. A listed build always uses a higher version so existing self-distributed installations can move forward to the public AMO release rather than attempting to reuse an already-distributed version.
 
 ## Production source boundary
 
@@ -61,4 +61,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Do not merge the `0.1.3` manifest bump or replace the current `0.1.2` self-distributed release until the listed AMO submission has been accepted/published and the final public listing/version has been re-observed.
+Do not replace the currently distributed signed companion (`0.1.2`/`0.1.3`, protocol 1) with `0.2.0` (protocol 2) until the technical-preview acceptance matrix in `docs/technical-preview.md` has passed for the exact release-candidate tuple (`pnpm release:tuple`), and the signed XPI SHA-256 has been recorded. Protocol-1 and protocol-2 components are intentionally incompatible and fail closed together.

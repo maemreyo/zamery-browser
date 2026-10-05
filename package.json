@@ -14,7 +14,8 @@
     "firefox:amo:prepare": "bash scripts/firefox-amo-listed.sh prepare",
     "firefox:amo:submit": "bash scripts/firefox-amo-listed.sh submit",
     "test": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox test && pnpm --filter @zamery/browser-mcp test",
-    "verify": "pnpm build && pnpm typecheck && pnpm test"
+    "verify": "pnpm build && pnpm typecheck && pnpm test",
+    "release:tuple": "node scripts/release-tuple.mjs"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "0.85.1",

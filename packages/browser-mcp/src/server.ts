@@ -807,14 +807,14 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
     {
       title: "Screenshot a shared tab",
       description:
-        "Capture the visible viewport (or a CSS-pixel rect) of a shared tab and return the image so you can look at it. Output is bounded (longest side <= 1600 px, small JPEG). The screenshot is stored as a short-lived artifact (artifact_id) that expires when sharing ends. Needs the user to have allowed screenshots.",
+        "Capture the visible viewport (or a CSS-pixel rect) of a shared tab and return the image so you can look at it. Output is bounded (longest side <= 1600 px, small JPEG). The result also names a local image file: if you cannot see the inline image, open that file with your image viewer (for example view_image) and answer from what you actually see, never from guesses. The screenshot is a short-lived artifact (artifact_id) that expires when sharing ends. Needs the user to have allowed screenshots.",
       inputSchema: {
         context_id: CONTEXT_ID,
         rect: z.object({ x: z.number().min(0), y: z.number().min(0), width: z.number().int().min(1).max(4096), height: z.number().int().min(1).max(4096) }).optional()
           .describe("Page-relative CSS pixels. Omit for the current viewport."),
         format: z.enum(["jpeg", "png"]).optional().describe("Default jpeg (smaller). png is lossless but may be too large to show inline."),
         include_image: z.boolean().optional().describe("Default true. Set false to only get the artifact metadata."),
-        local_file: z.boolean().optional().describe("Also return the path of the stored image file so a host with its own image viewer can open it. Default false."),
+        local_file: z.boolean().optional().describe("Also return the path of the stored image file so a host with its own image viewer can open it. Default true: some hosts do not pass inline MCP images to the model, but can open a local file."),
         request_id: REQUEST_ID,
         browser_instance_id: INSTANCE_ID,
       },
@@ -850,7 +850,7 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         SHOT_CAVEAT,
       ].filter(Boolean);
       let localPath: string | undefined;
-      if (local_file === true && canMaterialize(provider)) {
+      if (local_file !== false && canMaterialize(provider)) {
         localPath = (await provider.materializeArtifact(d.artifactId)).path;
         lines.push(`local file (open with an image viewer; it is deleted when sharing ends): ${localPath}`);
       }

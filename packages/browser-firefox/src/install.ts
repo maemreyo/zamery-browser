@@ -74,6 +74,8 @@ export function installFirefoxNativeHost(options: {
   nodePath?: string;
   force?: boolean;
   dryRun?: boolean;
+  /** Extra environment for the host launcher (for isolated acceptance runs). Keys must be shell-safe identifiers. */
+  launcherEnv?: Readonly<Record<string, string>>;
 }): FirefoxNativeHostInstallPlan {
   const plan = buildFirefoxNativeHostInstallPlan(options);
   if (options.dryRun) return plan;
@@ -103,8 +105,13 @@ export function installFirefoxNativeHost(options: {
   fs.chmodSync(plan.installedHostPath, 0o700);
 
   const nodePath = options.nodePath ?? process.execPath;
+  const envLines = Object.entries(options.launcherEnv ?? {}).map(([key, value]) => {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key)) throw new Error(`invalid launcher environment variable name: ${key}`);
+    return `export ${key}=${shellQuote(value)}`;
+  });
   const launcher = [
     "#!/bin/sh",
+    ...envLines,
     `printf '%s\\n' \"[zamery-browser-firefox-launcher] $(date '+%Y-%m-%dT%H:%M:%S%z') pid=$$ args=$*\" >>${shellQuote(plan.stderrLogPath)}`,
     `exec ${shellQuote(nodePath)} ${shellQuote(plan.installedHostPath)} 2>>${shellQuote(plan.stderrLogPath)}`,
     "",

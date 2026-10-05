@@ -241,6 +241,7 @@ describe("screenshots reach the model as bounded images", () => {
     assert.match(result.structuredContent.artifact_id, /^art_/);
     assert.ok(!JSON.stringify(result.structuredContent).includes(image.data.slice(0, 40)));
     assert.match(textOf(result), /not proof of the page's current state/);
+    assert.match(textOf(result), /local file .*art_[0-9a-f]{32}\.jpg/, "a viewer-readable path is included by default");
     const call = stack.stack.company.state.captureCalls.at(-1).opts;
     assert.equal(call.format, "jpeg");
     assert.deepEqual(call.rect, { x: 0, y: 0, width: 800, height: 600 }, "viewport rect comes from the observed page geometry");
