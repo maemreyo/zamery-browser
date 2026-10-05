@@ -254,3 +254,9 @@ export function hasCapability(
 }
 
 export * from "./v2.js";
+
+export * from "./authorization-v1.js";
+export * from "./control-v1.js";
+export * from "./tabs-v1.js";
+export * from "./groups-v1.js";
+export * from "./artifacts-v1.js";
