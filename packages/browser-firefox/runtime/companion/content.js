@@ -22,6 +22,24 @@
   const nodeIds = new WeakMap();
   const nodes = new Map();
   let nextNodeId = 1;
+  const MAX_SNAPSHOT_NODES = 250;
+  // Counts trusted human gestures only. Synthetic events (ours or the page's) never bump it.
+  let interactionGeneration = 0;
+  let armed = false;
+
+  function onHumanInteraction(event) {
+    if (!event.isTrusted) return;
+    interactionGeneration += 1;
+    if (armed) {
+      armed = false;
+      try {
+        void browser.runtime.sendMessage({ type: "zamery_browser_firefox_interaction" }).catch(() => undefined);
+      } catch {}
+    }
+  }
+  for (const type of ["pointerdown", "keydown", "beforeinput", "input", "change", "paste", "drop"]) {
+    window.addEventListener(type, onHumanInteraction, { capture: true, passive: true });
+  }
 
   function nodeIdFor(element) {
     let id = nodeIds.get(element);
@@ -54,19 +72,86 @@
     return tag || "element";
   }
 
+  const CREDENTIAL_AUTOCOMPLETE = /\b(one-time-code|current-password|new-password|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year|cc-name)\b/i;
+  const CREDENTIAL_HINT = /\b(otp|totp|hotp|2fa|mfa|cvv|cvc|passcode|one[- ]?time|security code|verification code|recovery code|backup code)\b/i;
+  const VALUELESS_INPUT_TYPES = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"]);
+
+  function isFormControl(element) {
+    const tag = element.tagName?.toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select" || Boolean(element.isContentEditable);
+  }
+
+  // Credential and one-time-code fields are a human job: the snapshot flags them and writes are refused.
+  function isCredentialField(element) {
+    const tag = element.tagName?.toLowerCase();
+    if (tag !== "input" && tag !== "textarea") return false;
+    const type = (element.getAttribute("type") || "text").toLowerCase();
+    if (type === "password") return true;
+    if (CREDENTIAL_AUTOCOMPLETE.test(element.getAttribute("autocomplete") || "")) return true;
+    const hint = [element.getAttribute("name"), element.id, element.getAttribute("aria-label"), element.getAttribute("placeholder")]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/[_.\-]+/g, " ");
+    return CREDENTIAL_HINT.test(hint);
+  }
+
+  function labelTextFor(element) {
+    const parts = [];
+    const labelledBy = element.getAttribute?.("aria-labelledby");
+    if (labelledBy) {
+      for (const id of labelledBy.split(/\s+/)) {
+        const target = id ? document.getElementById(id) : null;
+        if (target && !isFormControl(target)) parts.push(target.textContent);
+      }
+    }
+    if (parts.length === 0 && element.labels) {
+      for (const label of element.labels) parts.push(label.textContent);
+    }
+    return clean(parts.join(" "));
+  }
+
+  // Names describe a control; they must never carry what the user typed into it. Form controls therefore
+  // never contribute innerText/textContent (textarea/contenteditable/select content is user data).
+  function nameFor(element) {
+    const explicit = clean(element.getAttribute?.("aria-label"));
+    if (explicit) return explicit;
+    if (isFormControl(element)) {
+      const tag = element.tagName?.toLowerCase();
+      const type = (element.getAttribute("type") || "").toLowerCase();
+      if (tag === "input" && ["button", "submit", "reset"].includes(type)) return clean(element.getAttribute("value") || labelTextFor(element));
+      return labelTextFor(element) || clean(element.getAttribute("placeholder") || element.getAttribute("title") || "");
+    }
+    return clean(element.innerText || element.textContent || element.getAttribute?.("title") || "");
+  }
+
   function elementSummary(element) {
     const type = (element.getAttribute?.("type") || "").toLowerCase();
-    const sensitive = type === "password";
-    return {
+    const summary = {
       node_id: nodeIdFor(element),
       role: roleFor(element),
-      name: clean(element.getAttribute?.("aria-label") || element.innerText || element.textContent || element.getAttribute?.("placeholder")),
+      name: nameFor(element),
       tag: element.tagName?.toLowerCase() || "",
       type: type || undefined,
-      value: sensitive ? undefined : ("value" in element ? clean(element.value) : undefined),
       contenteditable: Boolean(element.isContentEditable),
       connected: element.isConnected,
     };
+    if (isCredentialField(element)) summary.credential = true;
+    if (element instanceof HTMLInputElement && (type === "checkbox" || type === "radio") && !summary.credential) summary.checked = element.checked;
+    if (element.disabled === true) summary.disabled = true;
+    return summary;
+  }
+
+  function isSnapshotVisible(element) {
+    if (!(element instanceof Element)) return false;
+    if (element instanceof HTMLInputElement && (element.type || "").toLowerCase() === "hidden") return false;
+    if (element.getAttribute?.("aria-hidden") === "true") return false;
+    try {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+      return element.getClientRects().length > 0;
+    } catch {
+      return false;
+    }
   }
 
   function snapshot() {
@@ -84,11 +169,16 @@
     ].join(",");
     const seen = new Set();
     const items = [];
+    let truncated = false;
     for (const element of document.querySelectorAll(selector)) {
       if (!(element instanceof Element) || seen.has(element)) continue;
+      if (!isSnapshotVisible(element)) continue;
+      if (items.length >= MAX_SNAPSHOT_NODES) {
+        truncated = true;
+        break;
+      }
       seen.add(element);
       items.push(elementSummary(element));
-      if (items.length >= 250) break;
     }
     return {
       document_id: documentId,
@@ -96,6 +186,8 @@
       url: location.href,
       title: document.title,
       frame_url: location.href,
+      interaction_generation: interactionGeneration,
+      coverage: { truncated, node_limit: MAX_SNAPSHOT_NODES, values_exported: false, hidden_controls_excluded: true },
       nodes: items,
     };
   }
@@ -139,6 +231,9 @@
     const resolved = resolveNode(request);
     if (resolved.error) return resolved;
     const element = resolved.element;
+    if (["fill", "type", "key"].includes(request.action) && isCredentialField(element)) {
+      return { error: { code: "USER_TAKEOVER_REQUIRED", reason: "credential_field" } };
+    }
     const beforeActivation = Boolean(navigator.userActivation?.isActive);
     const delayAfterMs = location.hostname === "127.0.0.1"
       ? Math.max(0, Math.min(15_000, Number(request.v0c_test_delay_after_ms || 0)))
@@ -290,7 +385,14 @@
 
   browser.runtime.onMessage.addListener((message) => {
     if (!message || typeof message !== "object") return undefined;
-    if (message.type === "zamery_browser_firefox_snapshot" || message.type === "zamery_v0c_snapshot") return Promise.resolve(snapshot());
+    if (message.type === "zamery_browser_firefox_arm") {
+      armed = true;
+      return undefined;
+    }
+    if (message.type === "zamery_browser_firefox_snapshot" || message.type === "zamery_v0c_snapshot") {
+      if (message.arm === true) armed = true;
+      return Promise.resolve(snapshot());
+    }
     if (message.type === "zamery_browser_firefox_act" || message.type === "zamery_v0c_act") return Promise.resolve(act(message));
     if (message.type === "zamery_browser_firefox_asset_discover_v1") {
       return discoveryCall(() => assetDiscoveryRuntime.discoverAssets());
@@ -344,7 +446,9 @@
       return assetCall(() => assetRuntime.cancelRequest(message.request_id));
     }
     if (message.type === "zamery_browser_firefox_ping" || message.type === "zamery_v0c_ping") {
+      if (message.arm === true) armed = true;
       return Promise.resolve({
+        interaction_generation: interactionGeneration,
         document_id: documentId,
         browser_document_id: browserDocumentId,
         url: location.href,
