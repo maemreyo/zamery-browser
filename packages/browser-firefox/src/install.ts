@@ -85,7 +85,7 @@ export function installFirefoxNativeHost(options: {
   fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
   fs.mkdirSync(manifestDir, { recursive: true });
 
-  if (fs.existsSync(plan.manifestPath) && !options.force) {
+  if (fs.existsSync(plan.manifestPath)) {
     let existing: unknown;
     try {
       existing = JSON.parse(fs.readFileSync(plan.manifestPath, "utf8"));
@@ -93,7 +93,9 @@ export function installFirefoxNativeHost(options: {
       existing = undefined;
     }
     if (JSON.stringify(existing) !== JSON.stringify(plan.manifest)) {
-      throw new Error(`refusing to overwrite different Native Messaging manifest: ${plan.manifestPath}`);
+      if (!options.force) throw new Error(`refusing to overwrite different Native Messaging manifest: ${plan.manifestPath}`);
+      // A forced overwrite is never silent or unrecoverable: the previous manifest is kept next to it.
+      fs.copyFileSync(plan.manifestPath, `${plan.manifestPath}.bak-${Date.now()}`);
     }
   }
 

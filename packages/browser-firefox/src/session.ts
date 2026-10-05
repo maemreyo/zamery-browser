@@ -9,6 +9,8 @@ import {
 } from "./protocol.js";
 
 export function firefoxRuntimeRoot(uid = typeof process.getuid === "function" ? process.getuid() : "user"): string {
+  // Same override the native host honours, so tests and diagnostics can use an isolated runtime directory.
+  if (process.env.ZAMERY_BROWSER_FIREFOX_RUNTIME_DIR) return process.env.ZAMERY_BROWSER_FIREFOX_RUNTIME_DIR;
   const tempRoot = process.platform === "win32" ? os.tmpdir() : "/tmp";
   return path.join(tempRoot, `zamery-browser-firefox-${uid}`);
 }

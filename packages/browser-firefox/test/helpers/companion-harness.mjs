@@ -72,6 +72,7 @@ export function createFakeBrowser(options = {}) {
       id: EXTENSION_ID,
       lastError: null,
       getManifest: () => ({ version: "0.1.4-test", manifest_version: 2 }),
+      getBrowserInfo: async () => ({ name: "Firefox", version: options.firefoxVersion ?? "157.0", buildID: "20260101000000" }),
       getURL: (name) => `moz-extension://test/${name}`,
       connectNative: () => {
         const port = {

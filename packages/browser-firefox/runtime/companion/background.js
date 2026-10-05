@@ -539,8 +539,9 @@ async function handleRequest(message) {
   const audienceId = requestAudienceId(message);
 
   if (op === "status") {
-    recordAudience(audienceId, message.params?.client_label);
-    respond(id, { replayed: false, ok: true, result: statusResult(audienceId) });
+    // Diagnostics (`probe`) must not show up as a local agent the user could share tabs with.
+    if (message.params?.probe !== true) recordAudience(audienceId, message.params?.client_label);
+    respond(id, { replayed: false, ok: true, result: { ...statusResult(audienceId), browser_info: await browserInfo() } });
     return;
   }
 
@@ -619,6 +620,18 @@ function normalizeError(error) {
     message: String(error?.message || error || "browser request failed").slice(0, 300),
     reason: error?.reason,
   };
+}
+
+let cachedBrowserInfo;
+async function browserInfo() {
+  if (cachedBrowserInfo) return cachedBrowserInfo;
+  try {
+    const info = await browser.runtime.getBrowserInfo?.();
+    cachedBrowserInfo = info ? { name: String(info.name || ""), version: String(info.version || ""), build_id: String(info.buildID || "") } : { name: "", version: "", build_id: "" };
+  } catch {
+    cachedBrowserInfo = { name: "", version: "", build_id: "" };
+  }
+  return cachedBrowserInfo;
 }
 
 function statusResult(audienceId) {

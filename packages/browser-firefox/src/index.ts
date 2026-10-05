@@ -19,3 +19,5 @@ export {
   type FirefoxNativeHostInstallPlan,
 } from "./install.js";
 export { ArtifactError, ArtifactStore, defaultArtifactRoot } from "./artifact-store.js";
+export { runFirefoxDoctor, formatDoctorReport, type DoctorReport, type DoctorFinding, type DoctorSession } from "./doctor.js";
+export { firefoxCompatibilityFacts, FIREFOX_JOURNAL_SCHEMA_VERSION, FIREFOX_MIN_BROWSER_VERSION, type FirefoxCompatibilityFacts } from "./compat.js";
