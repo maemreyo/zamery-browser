@@ -29,6 +29,12 @@ async function boot({ png = quadrantPng(), lifetimeMs } = {}) {
 }
 
 const shot = (provider, target, extra = {}) => provider.screenshot({ requestId: createFirefoxRequestId(), ...target, contextId: "tab:1", ...extra });
+/** The per-process artifact directory inside the per-consumer directory. */
+const processDir = (root) => {
+  const [audienceDir] = fs.readdirSync(root);
+  const [proc] = fs.readdirSync(path.join(root, audienceDir)).filter((name) => /^p\d+-/.test(name));
+  return path.join(root, audienceDir, proc);
+};
 const files = (root) => (fs.existsSync(root) ? fs.readdirSync(root, { recursive: true }).map(String) : []);
 
 describe("screenshot artifacts through the real stack", () => {
@@ -45,9 +51,9 @@ describe("screenshot artifacts through the real stack", () => {
     assert.equal(d.width, 500);
     assert.equal(result.receipt.operation, "screenshot.capture");
 
-    const [audienceDir] = fs.readdirSync(artifactRoot);
-    const dir = path.join(artifactRoot, audienceDir);
+    const dir = processDir(artifactRoot);
     assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.dirname(dir)).mode & 0o777, 0o700);
     for (const name of fs.readdirSync(dir)) assert.equal(fs.statSync(path.join(dir, name)).mode & 0o777, 0o600, name);
     assert.deepEqual(fs.readdirSync(dir).sort(), [`${d.artifactId}.json`, `${d.artifactId}.png`]);
     assert.ok(!fs.readFileSync(path.join(dir, `${d.artifactId}.json`), "utf8").includes("a.test"), "metadata carries no URL or title");
@@ -87,16 +93,14 @@ describe("screenshot artifacts through the real stack", () => {
   it("detects on-disk tampering", async () => {
     const { provider, target, artifactRoot } = await boot();
     const e = (await shot(provider, target)).value;
-    const [audienceDir] = fs.readdirSync(artifactRoot);
-    fs.appendFileSync(path.join(artifactRoot, audienceDir, `${e.artifactId}.png`), "x");
+    fs.appendFileSync(path.join(processDir(artifactRoot), `${e.artifactId}.png`), "x");
     await assert.rejects(provider.readArtifact(e.artifactId), (error) => error.code === "ARTIFACT_INTEGRITY_MISMATCH");
   });
 
   it("does not follow a symlink planted in place of an artifact", async () => {
     const { provider, target, artifactRoot, stack } = await boot();
     const d = (await shot(provider, target)).value;
-    const [audienceDir] = fs.readdirSync(artifactRoot);
-    const bin = path.join(artifactRoot, audienceDir, `${d.artifactId}.png`);
+    const bin = path.join(processDir(artifactRoot), `${d.artifactId}.png`);
     const secret = path.join(stack.roots.root, "secret.txt");
     fs.writeFileSync(secret, "TOP-SECRET");
     fs.rmSync(bin);
@@ -154,5 +158,49 @@ describe("materialized artifact path", () => {
     await stack.company.popup({ type: "zamery_browser_firefox_revoke" });
     await assert.rejects(provider.materializeArtifact(d.artifactId), (error) => error.code === "ARTIFACT_EXPIRED");
     assert.equal(fs.existsSync(file), false);
+  });
+});
+
+describe("artifact lifetime without anyone reading", () => {
+  it("a periodic reaper deletes files once the access binding ends, with no read needed", async () => {
+    const stack = await startStack();
+    stacks.push(stack);
+    stack.company.state.captureResult = pngDataUrl(quadrantPng());
+    const artifactRoot = path.join(stack.roots.root, "art");
+    const provider = createFirefoxBrowserProviderV2({ sessionsDir: path.join(stack.roots.runtimeDir, "sessions"), audienceId: AUD, artifactRoot, artifactReaperIntervalMs: 100 });
+    await provider.status();
+    const [instance] = await provider.listInstances();
+    const target = { browserInstanceId: instance.browserInstanceId, providerSessionId: instance.providerSessionId };
+    assert.equal((await stack.company.popup({ type: "zamery_browser_firefox_grant", audience_id: AUD, tab_ids: [1] })).ok, true);
+    const d = (await shot(provider, target)).value;
+    assert.ok(files(artifactRoot).some((name) => name.endsWith(`${d.artifactId}.png`)));
+    await stack.company.popup({ type: "zamery_browser_firefox_revoke" });
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && files(artifactRoot).some((name) => name.endsWith(".png"))) await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.deepEqual(files(artifactRoot).filter((name) => /\.(png|jpg|json)$/.test(name)), []);
+    await provider.close();
+  });
+
+  it("two processes with the same consumer id do not delete each other's artifacts; a dead process's directory is removed", async () => {
+    const { ArtifactStore } = await import("../dist/index.js");
+    const root = fs.mkdtempSync(path.join("/tmp", "zq-art-"));
+    try {
+      const first = new ArtifactStore({ root, audienceId: AUD });
+      const second = new ArtifactStore({ root, audienceId: AUD });
+      assert.notEqual(first.directory, second.directory);
+      const descriptor = { artifactId: `art_${"a".repeat(32)}`, kind: "screenshot", mediaType: "image/png", width: 1, height: 1, byteSize: 3, sha256: (await import("node:crypto")).createHash("sha256").update(Buffer.from("abc")).digest("hex"), contextId: "tab:1", documentId: null, capturedRect: { x: 0, y: 0, width: 1, height: 1 }, appliedScale: 1, grantRevision: 1, bindingToken: "t", createdAt: Date.now(), expiresAt: Date.now() + 60_000 };
+      first.write(descriptor, Buffer.from("abc"));
+      second.clear();
+      assert.equal(first.read(descriptor.artifactId).data.length, 3, "the other process's clear() left it alone");
+      // Simulate a crashed process: a directory whose pid is gone is removed by the next store.
+      const orphan = path.join(path.dirname(first.directory), "p2147483000-deadbeef");
+      fs.mkdirSync(orphan, { mode: 0o700 });
+      fs.writeFileSync(path.join(orphan, "x.png"), "x");
+      new ArtifactStore({ root, audienceId: AUD });
+      assert.equal(fs.existsSync(orphan), false);
+      assert.ok(fs.existsSync(first.directory), "a live sibling directory is kept");
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

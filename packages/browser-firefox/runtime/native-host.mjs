@@ -59,9 +59,18 @@ const startedAt = Date.now();
 console.error(`[zamery-browser-firefox-host] startup pid=${process.pid} argv=${process.argv.length}`);
 fs.mkdirSync(sessionsDir, { recursive: true, mode: 0o700 });
 fs.mkdirSync(durableStateDir, { recursive: true, mode: 0o700 });
-try { fs.chmodSync(runtimeRoot, 0o700); } catch {}
-try { fs.chmodSync(sessionsDir, 0o700); } catch {}
-try { fs.chmodSync(durableStateDir, 0o700); } catch {}
+// The runtime root lives under a predictable /tmp path. Never publish a socket or session receipt into a
+// directory another user could own or write to.
+function requirePrivateDirectory(dir) {
+  try { fs.chmodSync(dir, 0o700); } catch {}
+  const stat = fs.lstatSync(dir);
+  const ownerOk = typeof process.getuid !== "function" || stat.uid === process.getuid();
+  if (stat.isSymbolicLink() || !stat.isDirectory() || !ownerOk || (stat.mode & 0o077) !== 0) {
+    console.error(`[zamery-browser-firefox-host] refusing to start: ${dir} is not a private directory owned by this user`);
+    process.exit(78);
+  }
+}
+for (const dir of [runtimeRoot, sessionsDir, durableStateDir]) requirePrivateDirectory(dir);
 try { fs.unlinkSync(socketPath); } catch {}
 
 let session = {
@@ -425,6 +434,13 @@ function sanitizeStoredResponse(response) {
   };
 }
 
+function forgetDurableMutation(request, audience) {
+  const key = mutationKey(audience, request.id);
+  durableMutations.delete(key);
+  volatileMutationFingerprints.delete(key);
+  persistDurableMutations();
+}
+
 function durableMutationComplete(request, audience, response) {
   const key = mutationKey(audience, request.id);
   if (!volatileMutationFingerprints.has(key)) volatileMutationFingerprints.set(key, volatileMutationFingerprint(request, audience));
@@ -506,7 +522,11 @@ function settlePending(id, value) {
     pending.delete(id);
     clearTimeout(entry.timer);
     let delivered = value;
-    if (isDurableMutation(entry.request)) {
+    if (isDurableMutation(entry.request) && value?.ok !== true && value?.outcome === "not_started") {
+      // Nothing happened, so there is nothing to reconcile: forget the attempt and let a retry with the same
+      // id run for real (the tool contract says to reuse the id to retry).
+      try { forgetDurableMutation(entry.request, entry.audience); } catch (error) { console.error(`[zamery-browser-firefox-host] forget failed: ${error?.message || error}`); }
+    } else if (isDurableMutation(entry.request)) {
       try {
         durableMutationComplete(entry.request, entry.audience, value);
       } catch (error) {
@@ -526,7 +546,10 @@ function settlePending(id, value) {
   if (late) {
     lateEntries.delete(id);
     try {
-      if (isDurableMutation(late.request)) durableMutationComplete(late.request, late.audience, value);
+      if (isDurableMutation(late.request)) {
+        if (value?.ok !== true && value?.outcome === "not_started") forgetDurableMutation(late.request, late.audience);
+        else durableMutationComplete(late.request, late.audience, value);
+      }
     } catch (error) {
       console.error(`[zamery-browser-firefox-host] late settle failed: ${error?.message || error}`);
     }

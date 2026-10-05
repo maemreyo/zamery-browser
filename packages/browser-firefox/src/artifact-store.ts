@@ -38,6 +38,7 @@ export interface ArtifactStoreOptions {
  */
 export class ArtifactStore {
   readonly #dir: string;
+  readonly #audienceDir: string;
   readonly #lifetimeMs: number;
   readonly #maxBytes: number;
   readonly #maxFiles: number;
@@ -46,15 +47,43 @@ export class ArtifactStore {
   constructor(options: ArtifactStoreOptions) {
     const root = options.root ?? defaultArtifactRoot();
     const audienceKey = createHash("sha256").update(options.audienceId).digest("hex").slice(0, 24);
-    this.#dir = path.join(root, audienceKey);
+    // One directory per process: two processes sharing a consumer id never delete each other's live files.
+    this.#audienceDir = path.join(root, audienceKey);
+    this.#dir = path.join(this.#audienceDir, `p${process.pid}-${randomBytes(4).toString("hex")}`);
     this.#lifetimeMs = options.lifetimeMs ?? BROWSER_ARTIFACT_LIMITS_V1.defaultLifetimeMs;
     this.#maxBytes = options.maxBytes ?? BROWSER_ARTIFACT_LIMITS_V1.maxAudienceBytes;
     this.#maxFiles = options.maxFiles ?? 16;
     this.#now = options.now ?? (() => Date.now());
-    fs.mkdirSync(this.#dir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(this.#audienceDir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(this.#audienceDir, 0o700);
+    fs.mkdirSync(this.#dir, { mode: 0o700 });
     fs.chmodSync(this.#dir, 0o700);
-    if (fs.lstatSync(this.#dir).isSymbolicLink()) throw new Error("artifact directory must not be a symlink");
+    if (fs.lstatSync(this.#dir).isSymbolicLink() || fs.lstatSync(this.#audienceDir).isSymbolicLink()) throw new Error("artifact directory must not be a symlink");
+    this.#removeOrphans();
     this.sweep();
+  }
+
+  /** Remove directories left by processes of this consumer that no longer exist (crash, SIGKILL). */
+  #removeOrphans(): void {
+    for (const name of fs.readdirSync(this.#audienceDir)) {
+      const match = /^p(\d+)-[0-9a-f]{8}$/.exec(name);
+      if (!match || `${this.#dir}` === path.join(this.#audienceDir, name)) continue;
+      const pid = Number(match[1]);
+      let alive = true;
+      try { process.kill(pid, 0); } catch (error) { alive = (error as NodeJS.ErrnoException).code === "EPERM"; }
+      if (!alive) fs.rmSync(path.join(this.#audienceDir, name), { recursive: true, force: true });
+    }
+  }
+
+  /** Ids currently stored, for the owner's periodic authority check. */
+  list(): BrowserArtifactDescriptorV1[] {
+    const out: BrowserArtifactDescriptorV1[] = [];
+    for (const name of fs.readdirSync(this.#dir)) {
+      const match = /^(art_[0-9a-f]{32})\.json$/.exec(name);
+      if (!match) continue;
+      try { out.push(JSON.parse(fs.readFileSync(path.join(this.#dir, name), "utf8")) as BrowserArtifactDescriptorV1); } catch { this.remove(match[1]!); }
+    }
+    return out;
   }
 
   get directory(): string {

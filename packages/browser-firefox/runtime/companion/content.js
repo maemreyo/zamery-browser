@@ -23,6 +23,7 @@
   const nodes = new Map();
   let nextNodeId = 1;
   const MAX_SNAPSHOT_NODES = 250;
+  const MAX_LABEL_CHARS = 600;
   // Counts trusted human gestures only. Synthetic events (ours or the page's) never bump it.
   let interactionGeneration = 0;
   let armed = false;
@@ -73,7 +74,7 @@
   }
 
   const CREDENTIAL_AUTOCOMPLETE = /\b(one-time-code|current-password|new-password|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year|cc-name)\b/i;
-  const CREDENTIAL_HINT = /\b(otp|totp|hotp|2fa|mfa|cvv|cvc|passcode|one[- ]?time|security code|verification code|recovery code|backup code)\b/i;
+  const CREDENTIAL_HINT = /\b(otp|totp|hotp|2fa|mfa|cvv|cvc|cvn|passcode|one[- ]?time|security code|verification code|recovery code|backup code|card ?(number|num|no)|cardnum|credit ?card|debit ?card|cc ?(num|number|no)|ccnum|iban|swift|routing ?number|account ?number|ssn|social security|tax ?id|passport|pin ?code|secret ?(key|answer))\b/i;
   const VALUELESS_INPUT_TYPES = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"]);
 
   // isContentEditable is the truth in a browser; the attribute is checked too so the rule never depends on it alone.
@@ -128,7 +129,29 @@
       if (tag === "input" && ["button", "submit", "reset"].includes(type)) return clean(element.getAttribute("value") || labelTextFor(element));
       return labelTextFor(element) || clean(element.getAttribute("placeholder") || element.getAttribute("title") || "");
     }
-    return clean(element.innerText || element.textContent || element.getAttribute?.("title") || "");
+    return clean(readableLabel(element) || element.getAttribute?.("title") || "");
+  }
+
+  // Text of an ordinary element, skipping any form control or editable subtree inside it, so a wrapper that
+  // matched the snapshot selector can never leak what the user typed into a nested field.
+  function readableLabel(element) {
+    const parts = [];
+    let length = 0;
+    const walk = (node) => {
+      if (length >= MAX_LABEL_CHARS) return;
+      if (node.nodeType === 3) {
+        parts.push(node.nodeValue);
+        length += node.nodeValue.length;
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "script" || tag === "style" || tag === "noscript" || tag === "input" || tag === "textarea" || tag === "select") return;
+      if (isEditableHost(node)) return;
+      for (const child of node.childNodes) walk(child);
+    };
+    walk(element);
+    return parts.join(" ");
   }
 
   function elementSummary(element) {
@@ -177,7 +200,7 @@
       if (element.closest("script,style,noscript,textarea,select,[contenteditable],[aria-hidden='true']")) continue;
       // Avoid duplicating a block that only wraps other blocks (e.g. a <li> containing <p>).
       if (element.querySelector(TEXT_BLOCK_SELECTOR)) continue;
-      const text = clean(element.innerText || element.textContent);
+      const text = clean(readableLabel(element));
       if (!text) continue;
       if (blocks.length >= MAX_TEXT_BLOCKS || total + text.length > MAX_TEXT_TOTAL_CHARS) {
         truncated = true;
@@ -314,7 +337,8 @@
         const end = element.selectionEnd ?? element.value.length;
         const value = element.value.slice(0, start) + text + element.value.slice(end);
         setNativeValue(element, value);
-        element.setSelectionRange?.(start + text.length, start + text.length);
+        // setSelectionRange throws on input types without a caret (email, number); the text is already set.
+        try { element.setSelectionRange?.(start + text.length, start + text.length); } catch { /* not selectable */ }
         dispatchInputEvents(element);
       } else if (element.isContentEditable) {
         return {

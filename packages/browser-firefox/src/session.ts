@@ -28,17 +28,35 @@ export function listLiveFirefoxSessions(options: {
   const maxAgeMs = options.maxAgeMs ?? DEFAULT_FIREFOX_SESSION_MAX_AGE_MS;
   const dir = options.sessionsDir ?? firefoxSessionsDir();
   if (!fs.existsSync(dir)) return [];
+  // The runtime root is a predictable path under /tmp. Refuse to trust a session directory that this user does
+  // not exclusively own: a planted receipt could otherwise redirect requests to another user's socket.
+  const uid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  const trusted = (candidate: string, kind: "dir" | "file"): boolean => {
+    try {
+      const stat = fs.lstatSync(candidate);
+      if (stat.isSymbolicLink()) return false;
+      if (kind === "dir" ? !stat.isDirectory() : !stat.isFile()) return false;
+      if (uid !== undefined && stat.uid !== uid) return false;
+      return (stat.mode & (kind === "dir" ? 0o022 : 0o022)) === 0;
+    } catch {
+      return false;
+    }
+  };
+  if (!trusted(dir, "dir") || !trusted(path.dirname(dir), "dir")) return [];
 
   return fs.readdirSync(dir)
     .filter((name) => name.endsWith(".json"))
     .map((name) => {
       try {
-        return JSON.parse(fs.readFileSync(path.join(dir, name), "utf8")) as FirefoxSessionReceipt;
+        const file = path.join(dir, name);
+        if (!trusted(file, "file")) return null;
+        return JSON.parse(fs.readFileSync(file, "utf8")) as FirefoxSessionReceipt;
       } catch {
         return null;
       }
     })
     .filter((value): value is FirefoxSessionReceipt => Boolean(value))
+    .filter((session) => typeof session.socket_path === "string" && path.dirname(session.socket_path) === path.dirname(dir))
     .filter((session) => session.protocol_version === FIREFOX_BROKER_PROTOCOL_VERSION)
     .filter((session) => now - Number(session.last_heartbeat_at || 0) < maxAgeMs)
     .sort((a, b) => Number(b.last_heartbeat_at || 0) - Number(a.last_heartbeat_at || 0));

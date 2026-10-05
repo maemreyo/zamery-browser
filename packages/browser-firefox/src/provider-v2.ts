@@ -556,7 +556,7 @@ export class FirefoxBrowserProviderV2 implements
   readonly #audienceId: string;
   readonly #clientLabel: string | undefined;
   readonly #autoClaim: boolean;
-  readonly #artifactOptions: { root?: string; lifetimeMs?: number };
+  readonly #artifactOptions: { root?: string; lifetimeMs?: number; reaperIntervalMs?: number };
   #artifacts: ArtifactStore | undefined;
   readonly #trackedRefs = new Map<string, TrackedRef>();
 
@@ -570,12 +570,44 @@ export class FirefoxBrowserProviderV2 implements
     this.#artifactOptions = {
       ...(options.artifactRoot !== undefined ? { root: options.artifactRoot } : {}),
       ...(options.artifactLifetimeMs !== undefined ? { lifetimeMs: options.artifactLifetimeMs } : {}),
+      ...(options.artifactReaperIntervalMs !== undefined ? { reaperIntervalMs: options.artifactReaperIntervalMs } : {}),
     };
   }
+
+  #reaper: ReturnType<typeof setInterval> | undefined;
 
   #artifactStore(): ArtifactStore {
     this.#artifacts ??= new ArtifactStore({ ...this.#artifactOptions, audienceId: this.#audienceId });
     return this.#artifacts;
+  }
+
+  /**
+   * Screenshots must not outlive the access they were captured under. Reads re-check authority, but files would
+   * otherwise sit on disk until someone read them, so a light timer removes expired ones and any whose binding ended.
+   */
+  #startReaper(): void {
+    if (this.#reaper) return;
+    const interval = this.#artifactOptions.reaperIntervalMs ?? 15_000;
+    this.#reaper = setInterval(() => { void this.reapArtifacts(); }, interval);
+    this.#reaper.unref?.();
+  }
+
+  async reapArtifacts(): Promise<void> {
+    const store = this.#artifacts;
+    if (!store) return;
+    try {
+      store.sweep();
+      const stored = store.list();
+      if (stored.length === 0) return;
+      let detail: BrowserAuthorizationDetailV1 | null = null;
+      try { detail = await this.authorizationDetail({}, {}); } catch { /* cannot verify: keep until expiry */ }
+      if (!detail) return;
+      for (const descriptor of stored) {
+        if (detail.state !== "granted" || detail.bindingToken !== descriptor.bindingToken || !detail.actions.includes("capture")) {
+          store.remove(descriptor.artifactId);
+        }
+      }
+    } catch { /* best effort */ }
   }
 
   async declaration(): Promise<BrowserProviderDeclarationV2> {
@@ -1464,6 +1496,7 @@ export class FirefoxBrowserProviderV2 implements
     };
     try {
       const stored = this.#artifactStore().write(descriptor, bytes);
+      this.#startReaper();
       return { outcome: "completed", receipt: this.#receipt(session, request.requestId, "screenshot.capture", "completed", { contextIds: [request.contextId] }), value: stored, replayed: false };
     } catch (error) {
       if (error instanceof ArtifactError) return failed({ code: error.code, message: error.message, reason: error.reason });
@@ -1516,6 +1549,7 @@ export class FirefoxBrowserProviderV2 implements
 
   async close(): Promise<void> {
     this.#trackedRefs.clear();
+    if (this.#reaper) clearInterval(this.#reaper);
     // Teardown removes this consumer's artifacts; they are never a durable store.
     try { this.#artifacts?.clear(); } catch { /* best effort */ }
   }

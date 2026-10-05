@@ -66,9 +66,10 @@ async function navigateTab(params, audienceId, { reload = false } = {}) {
 
   const key = String(tabId);
   const entry = binding.scope.tabs[key];
+  // Attribute the resulting tabs.onUpdated to the agent before it can fire.
+  lastAgentMutationAt = Date.now();
   if (reload) {
     await browser.tabs.reload(tabId);
-    lastAgentMutationAt = Date.now();
     return { outcome: "completed", context_id: contextId, ownership: ownedTabIds.has(tabId) ? "provider-owned" : "user-owned", completed_substeps: ["tab_reloaded"] };
   }
 
@@ -103,6 +104,7 @@ async function activateTab(params) {
   const { tabId, tab } = await contextAuthorization(contextId, "interact");
   requireNotUserControl();
   const substeps = [];
+  markAgentActivation();
   await browser.tabs.update(tabId, { active: true });
   substeps.push("tab_activated");
   await browser.windows.update(tab.windowId, { focused: true });
@@ -355,6 +357,7 @@ async function activateGroup(params) {
   if (!target) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "outside_scope", "the group has no authorized member to focus");
   await contextAuthorization(contextIdFor(target.id), "interact");
   const substeps = [];
+  markAgentActivation();
   const native = await browser.tabGroups.get(scoped.nativeGroupId);
   if (native.collapsed === true) {
     // Focusing a collapsed group's member would not show it; expanding is part of the requested activation.

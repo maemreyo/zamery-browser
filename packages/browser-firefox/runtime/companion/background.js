@@ -20,6 +20,7 @@ const ASSET_DISCOVERY_CONTENT_RPC_TIMEOUT_MS = 5_000;
 const ASSET_TRANSFER_CONTENT_RPC_TIMEOUT_MS = 35_000;
 // A human action within this window of an agent mutation is attributed to the agent, not the user.
 const AGENT_NAVIGATION_ATTRIBUTION_MS = 10_000;
+const AGENT_ACTIVATION_ATTRIBUTION_MS = 3_000;
 
 const MUTATION_OPS = new Set([
   "act",
@@ -71,6 +72,12 @@ const seenAudiences = new Map();
 const pendingOriginChanges = {};
 const interactionGenerations = new Map();
 let lastAgentMutationAt = 0;
+let agentActivationUntil = 0;
+
+/** The agent's own tab/window activation must not be mistaken for the user switching away. */
+function markAgentActivation() {
+  agentActivationUntil = Date.now() + AGENT_ACTIVATION_ATTRIBUTION_MS;
+}
 
 function requestAudienceId(message) {
   const value = String(message?.audience_id || "").trim();
@@ -298,6 +305,7 @@ function authorizationStatus(options = {}) {
     return {
       ...summary,
       audience_id: consent?.enrolledConsumerId ?? null,
+      handoff_note: control.state === "user_control" && control.reason === "agent_requested" ? handoffNote : "",
       rebind: consent && !binding ? { origins: consent.scopeSummary.origins, count: consent.scopeSummary.count } : null,
       pending_origin_changes: { ...pendingOriginChanges },
       seen_audiences: [...seenAudiences.entries()].map(([id, entry]) => ({ audience_id: id, ...entry })),
@@ -603,7 +611,9 @@ function postDelivery(message, op, lineage, response, joined) {
     else denied(id, denial("BROWSER_AUTHORIZATION_REQUIRED", "authorization_changed_during_request"));
     return;
   }
-  if (MUTATION_OPS.has(op)) rememberCompleted(`${lineage.audienceId}\u0000${id}`, mutationFingerprint(message), response, lineage);
+  // A request that never started is not a recorded outcome: retrying the same id must run for real.
+  const neverStarted = response?.ok !== true && (response?.outcome === undefined || response?.outcome === "not_started");
+  if (MUTATION_OPS.has(op) && !neverStarted) rememberCompleted(`${lineage.audienceId}\u0000${id}`, mutationFingerprint(message), response, lineage);
   respond(id, { replayed: joined, ...response });
 }
 
@@ -1764,6 +1774,7 @@ async function createOwnedTab(params) {
     throw denial("BROWSER_CONTEXT_UNAVAILABLE", "unsupported_destination_scheme", "only http(s) destinations may be opened");
   }
   const window = await normalWindowForNewTab();
+  if (params.active) markAgentActivation();
   const tab = await browser.tabs.create({ url: rawUrl, active: Boolean(params.active), windowId: window.id });
   if (typeof tab.id !== "number") throw newError("BROWSER_REQUEST_FAILED", "created tab has no id");
   registerOwnedTab(tab, origin);
@@ -2008,7 +2019,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
-  if (control.state !== "agent_claimed") return;
+  if (control.state !== "agent_claimed" || Date.now() < agentActivationUntil) return;
   const claimed = tabIdFromContext(control.claimedContextId);
   if (claimed === tabId) return;
   void browser.tabs.get(claimed).then((tab) => {
@@ -2017,7 +2028,7 @@ browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
 });
 
 browser.windows.onFocusChanged.addListener((windowId) => {
-  if (control.state !== "agent_claimed" || windowId === browser.windows.WINDOW_ID_NONE) return;
+  if (control.state !== "agent_claimed" || windowId === browser.windows.WINDOW_ID_NONE || Date.now() < agentActivationUntil) return;
   void browser.tabs.get(tabIdFromContext(control.claimedContextId)).then((tab) => {
     if (tab.windowId !== windowId) userTakeover("window_switched");
   }).catch(() => undefined);

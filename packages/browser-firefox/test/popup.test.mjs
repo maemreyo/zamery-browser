@@ -146,6 +146,26 @@ describe("popup states", () => {
     assert.equal(popup.document.querySelector("#grant").textContent, "Share again");
   });
 
+  it("makes the user confirm a clock change before sharing again, and shows the agent's note as unverified", async () => {
+    const popup = await open({ ...base, state: "rebind_required", reason: "clock_regression_revalidation_required", duration_mode: "fixed", duration_days: 7, expires_at: Date.now() + 86_400_000, audience_id: "aud-1", seen_audiences: [{ audience_id: "aud-1", label: "", first_seen: 1, last_seen: 2 }], rebind: { origins: [], count: 1 } });
+    assert.ok(!popup.document.querySelector("#clock-row").classList.contains("hidden"));
+    assert.equal(popup.document.querySelector("#grant").disabled, true);
+    popup.document.querySelector("#clock-confirm").checked = true;
+    popup.document.querySelector("#clock-confirm").dispatchEvent(new popup.window.Event("change"));
+    assert.equal(popup.document.querySelector("#grant").disabled, false);
+    popup.document.querySelector("#grant").click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(popup.sent.find((m) => m.type === "zamery_browser_firefox_grant").confirm_clock_change, true);
+
+    const plain = await open({ ...base, state: "rebind_required", reason: "restart", duration_mode: "fixed", duration_days: 7, expires_at: Date.now() + 86_400_000, audience_id: "aud-1", seen_audiences: [{ audience_id: "aud-1", label: "", first_seen: 1, last_seen: 2 }], rebind: { origins: [], count: 1 } });
+    plain.document.querySelector("#grant").click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(plain.sent.find((m) => m.type === "zamery_browser_firefox_grant").confirm_clock_change, false, "no silent confirmation");
+
+    const note = await open({ ...base, state: "granted", scope_count: 1, actions: ["inspect"], duration_mode: "session", control: { state: "user_control", reason: "agent_requested", resume_requested: false }, handoff_note: "Please enter the 2FA code" });
+    assert.match(note.text(), /The agent says \(not verified\): Please enter the 2FA code/);
+  });
+
   it("asks before sharing a shared tab's new site", async () => {
     const popup = await open({ ...base, state: "granted", scope_count: 1, actions: ["inspect"], duration_mode: "session", control: { state: "shared_idle" }, pending_origin_changes: { 7: { from: "https://a.test", to: "https://login.test" } } });
     assert.match(popup.text(), /moved to login\.test/);

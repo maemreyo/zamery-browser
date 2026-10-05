@@ -598,3 +598,58 @@ describe("widening an active grant", () => {
     assert.ok(stored.grantRevision > granted.grant_revision);
   });
 });
+
+describe("review regressions", () => {
+  it("does not remember a refused (not_started) mutation, so the same id can be retried after re-sharing", async () => {
+    const { company, ask } = await boot();
+    const id = rid("retry");
+    const ref = await claimedRef(ask);
+    const refused = await ask("act", { context_id: "tab:2", ref, action: "click" }, { id }).catch(() => null);
+    assert.equal(refused.error.reason, "outside_scope");
+    // Same id, now on the shared tab: it must execute rather than replay the refusal.
+    const retried = await ask("act", { context_id: "tab:1", ref, action: "click" }, { id });
+    assert.equal(retried.ok, true, JSON.stringify(retried));
+    void company;
+  });
+
+  it("agent-initiated activation and navigation are not mistaken for the user", async () => {
+    const { company, ask } = await boot({ tabs: [{ id: 1, url: "https://a.test/", active: true }, { id: 3, url: "https://a.test/b", active: false }] });
+    await company.popup({ type: "zamery_browser_firefox_revoke" });
+    await company.popup({ type: "zamery_browser_firefox_grant", tab_ids: [1, 3], audience_id: AUD });
+    await ask("control_claim", { context_id: "tab:1" });
+    assert.equal((await ask("activate_tab", { context_id: "tab:3" })).ok, true);
+    await settle(50);
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.state, "agent_claimed", "own activation is not a takeover");
+
+    // A user-driven switch right after the attribution window still counts.
+    await settle(3_100);
+    await company.browser.tabs.update(1, { active: true }); // back to the claimed tab: not a switch away
+    await company.browser.tabs.update(3, { active: true });
+    await settle(50);
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.reason, "tab_switched");
+  });
+
+  it("an owned-tab navigation by the agent never looks like a manual one, even after a long idle", async () => {
+    const { company, ask } = await boot();
+    await ask("control_claim", { context_id: "tab:1" });
+    const original = company.browser.tabs.update;
+    company.browser.tabs.update = async (tabId, props) => {
+      company.tabs.get(tabId).url = props.url;
+      await company.events.tabsOnUpdated.fire(tabId, { url: props.url }, company.tabs.get(tabId)); // fires before the call resolves
+      return original(tabId, props);
+    };
+    const nav = await ask("navigate_tab", { context_id: "tab:1", url: "https://a.test/other" });
+    assert.equal(nav.ok, true, JSON.stringify(nav));
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.state, "agent_claimed");
+  });
+
+  it("shows the agent's hand-off note to the user, marked unverified", async () => {
+    const { company, ask } = await boot();
+    await ask("control_claim", { context_id: "tab:1" });
+    await ask("control_takeover", { note: "Please enter the 2FA code" });
+    const status = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(status.handoff_note, "Please enter the 2FA code");
+    const consumerView = await company.nonPopup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(consumerView.handoff_note, undefined);
+  });
+});

@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-05T16:28:57.901Z",
+  "at": "2026-10-05T16:39:55.625Z",
   "firefox": {
     "name": "environment",
     "firefox": "157.0",
@@ -128,8 +128,8 @@
       "name": "firefox-restart",
       "stateAfterRestart": "rebind_required",
       "reason": "restart",
-      "deadlineAfterRestart": "2026-10-08T16:28:47.053Z",
-      "originalDeadline": "2026-10-08T16:28:47.053Z"
+      "deadlineAfterRestart": "2026-10-08T16:39:45.357Z",
+      "originalDeadline": "2026-10-08T16:39:45.357Z"
     },
     {
       "name": "trusted-human-input",

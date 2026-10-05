@@ -223,6 +223,8 @@ export interface FirefoxBrowserProviderOptions {
   /** Managed screenshot artifact root. Defaults to ~/Library/Application Support/Zamery/browser-firefox/artifacts/screenshots. */
   artifactRoot?: string;
   artifactLifetimeMs?: number;
+  /** How often leftover artifacts are checked against the live access binding (default 15 s). */
+  artifactReaperIntervalMs?: number;
   /**
    * V1 and plain V2 consumers have no claim concept, so by default a snapshot also takes the write claim for that
    * tab (the previous "snapshot, then act" flow keeps working). Consumers that manage claims explicitly through

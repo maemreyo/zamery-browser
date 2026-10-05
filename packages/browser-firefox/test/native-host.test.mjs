@@ -274,3 +274,44 @@ describe("protocol revision gate", () => {
     assert.equal(firefox.session().companion_protocol_version, 1);
   });
 });
+
+describe("a request that never started is not a recorded outcome", () => {
+  it("lets the same request id retry for real after a not_started refusal (host journal)", async () => {
+    let calls = 0;
+    const { firefox, session } = await boot({
+      handler: async () => {
+        calls += 1;
+        return calls === 1
+          ? { ok: false, outcome: "not_started", error: { code: "BROWSER_AUTHORIZATION_REQUIRED", reason: "rebind_required", message: "x" } }
+          : { ok: true, outcome: "completed", result: { outcome: "completed" } };
+      },
+    });
+    const id = stampedRequestId();
+    const refused = await brokerCall(session, act(id, AUD_A, { action: "click" }));
+    assert.equal(refused.outcome, "not_started");
+    const retried = await brokerCall(session, act(id, AUD_A, { action: "click" }));
+    assert.equal(retried.ok, true, JSON.stringify(retried));
+    assert.equal(retried.replayed, undefined);
+    assert.equal(firefox.requestsOfType("act").length, 2, "the retry reached the companion");
+    const status = await brokerCall(session, { id: "status-ns-1", op: "mutation_status", audience_id: AUD_A, params: { request_id: id } });
+    assert.equal(status.result.state, "completed");
+  });
+
+  it("refuses to start in a runtime directory this user does not exclusively own", async () => {
+    const roots = makeTempRoot();
+    fs.mkdirSync(roots.runtimeDir, { recursive: true, mode: 0o700 });
+    fs.chmodSync(roots.runtimeDir, 0o777); // cannot be fixed? the host re-chmods it, so use a symlink instead
+    fs.rmSync(roots.runtimeDir, { recursive: true });
+    const elsewhere = path.join(roots.root, "elsewhere");
+    fs.mkdirSync(elsewhere, { mode: 0o700 });
+    fs.symlinkSync(elsewhere, roots.runtimeDir);
+    const { spawn } = await import("node:child_process");
+    const child = spawn(process.execPath, [new URL("../runtime/native-host.mjs", import.meta.url).pathname], {
+      env: { ...process.env, ZAMERY_BROWSER_FIREFOX_RUNTIME_DIR: roots.runtimeDir, ZAMERY_BROWSER_FIREFOX_STATE_DIR: roots.stateDir },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    cleanups.push(async () => { child.kill("SIGKILL"); roots.cleanup(); });
+    const code = await new Promise((resolve) => child.once("exit", resolve));
+    assert.equal(code, 78);
+  });
+});

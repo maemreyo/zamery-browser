@@ -217,3 +217,38 @@ describe("readable page text (bounded)", () => {
     assert.ok(snapshot.text_blocks.every((block) => block.text.length <= 300));
   });
 });
+
+describe("review regressions (content)", () => {
+  it("flags payment and identity fields that carry no autocomplete attribute", async () => {
+    const page = loadPage(`
+      <input type="text" name="card_number" aria-label="Card">
+      <input type="text" id="cardnum" aria-label="Number on front">
+      <input type="text" name="iban" aria-label="Bank">
+      <input type="text" name="ssn" aria-label="Government id">
+      <input type="text" name="nickname" aria-label="Nickname">
+    `);
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const flagged = Object.fromEntries(snapshot.nodes.map((node) => [node.name, Boolean(node.credential)]));
+    assert.deepEqual({ ...flagged }, { Card: true, "Number on front": true, Bank: true, "Government id": true, Nickname: false });
+  });
+
+  it("never lets a wrapper's name carry text typed into a nested editable region", async () => {
+    const page = loadPage(`
+      <div tabindex="0">Compose: <div contenteditable="true">TYPED-DRAFT-SECRET</div> <span>end</span></div>
+      <div role="textbox" tabindex="0"><textarea>NESTED-TEXTAREA-SECRET</textarea>label</div>
+    `);
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const serialized = JSON.stringify(snapshot);
+    assert.ok(!serialized.includes("TYPED-DRAFT-SECRET"));
+    assert.ok(!serialized.includes("NESTED-TEXTAREA-SECRET"));
+    assert.ok(snapshot.nodes.some((node) => /Compose/.test(node.name)));
+  });
+
+  it("completes a type action even where setSelectionRange throws (email inputs)", async () => {
+    const page = loadPage('<input id="e" type="email" aria-label="Email">');
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const result = await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: snapshot.nodes[0].node_id, action: "type", text: "a@b.test" });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(page.document.querySelector("#e").value, "a@b.test");
+  });
+});

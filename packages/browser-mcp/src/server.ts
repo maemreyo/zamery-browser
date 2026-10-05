@@ -852,7 +852,7 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
       let localPath: string | undefined;
       if (local_file !== false && canMaterialize(provider)) {
         localPath = (await provider.materializeArtifact(d.artifactId)).path;
-        lines.push(`local file (open with an image viewer; it is deleted when sharing ends): ${localPath}`);
+        lines.push(`local file (open with an image viewer; it is removed shortly after sharing ends): ${localPath}`);
       }
       const content: CallToolResult["content"] = [{ type: "text", text: lines.join("\n") }];
       if (inline) {
@@ -883,7 +883,7 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         if (mode === "local_file") {
           if (!canMaterialize(provider)) return errorResult("browser_artifact_read", { code: "UNSUPPORTED_CAPABILITY", message: "this provider cannot expose artifact files" });
           const { path: file } = await provider.materializeArtifact(artifact_id);
-          return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}.\nlocal file (open with an image viewer; it is deleted when sharing ends): ${file}\n${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false, local_path: file });
+          return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}.\nlocal file (open with an image viewer; it is removed shortly after sharing ends): ${file}\n${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false, local_path: file });
         }
         if (mode === "metadata") {
           return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}, ${d.byteSize} bytes. ${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false });

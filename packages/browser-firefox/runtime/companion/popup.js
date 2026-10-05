@@ -101,7 +101,7 @@ function renderControl(status) {
   $("#control-detail").textContent = control.state === "user_control"
     ? [reasonText(control.reason), control.resume_requested ? "The agent asked to continue." : ""].filter(Boolean).join(" ")
     : "";
-  $("#agent-note").textContent = "";
+  $("#agent-note").textContent = status.handoff_note ? `The agent says (not verified): ${status.handoff_note}` : "";
   $("#takeover").disabled = control.state === "user_control";
   $("#resume").classList.toggle("hidden", control.state !== "user_control");
 }
@@ -170,7 +170,11 @@ async function renderPicker(status, rebinding) {
     $("#custom-days").value = String(days ?? 2);
   }
   updateDurationUi(status, rebinding);
-  $("#grant").disabled = busy || !select.value;
+  const clockRow = $("#clock-row");
+  const clockIssue = rebinding && status.reason === "clock_regression_revalidation_required";
+  clockRow.classList.toggle("hidden", !clockIssue);
+  if (!clockIssue) $("#clock-confirm").checked = false;
+  $("#grant").disabled = busy || !select.value || (clockIssue && !$("#clock-confirm").checked);
   $("#grant").textContent = rebinding ? "Share again" : "Share selected";
 }
 
@@ -249,7 +253,8 @@ function updateDurationUi(status, rebinding) {
   else if (!valid) $("#expiry-preview").textContent = "Choose 1 to 30 days.";
   else if (days === null) $("#expiry-preview").textContent = "Access ends when you stop sharing or restart Firefox.";
   else $("#expiry-preview").textContent = `Access ends ${formatWhen(Date.now() + days * 86_400_000)}.`;
-  $("#grant").disabled = busy || !valid || !$("#agent").value;
+  const clockBlocked = !$("#clock-row").classList.contains("hidden") && !$("#clock-confirm").checked;
+  $("#grant").disabled = busy || !valid || !$("#agent").value || clockBlocked;
 }
 
 function render(status) {
@@ -311,7 +316,7 @@ const ERRORS = {
   native_host_session_not_ready: "The local bridge is not connected.",
   native_host_protocol_version_mismatch: "Update the companion and the local bridge.",
   tab_groups_api_unavailable: "This Firefox does not support tab groups.",
-  clock_regression_confirmation_required: "Your clock moved backwards. Tick the confirmation to continue.",
+  clock_regression_confirmation_required: "Your clock moved backwards. Tick the confirmation to share again.",
   no_pending_origin_change: "Nothing to confirm.",
   not_granted: "Sharing is not on.",
   tab_not_shareable: "That page can't be shared.",
@@ -324,6 +329,7 @@ function errorText(code) {
 $("#duration").addEventListener("change", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
 $("#custom-days").addEventListener("input", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
 $("#agent").addEventListener("change", () => { $("#grant").disabled = !$("#agent").value; });
+$("#clock-confirm").addEventListener("change", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
 
 $("#grant").addEventListener("click", () => {
   const tabIds = [...$("#tabs").querySelectorAll("input:checked")].map((input) => Number(input.value));
@@ -341,7 +347,7 @@ $("#grant").addEventListener("click", () => {
     group_ids: groupIds,
     group_policy: document.querySelector("input[name=group-policy]:checked")?.value,
     actions,
-    ...(rebinding ? { confirm_clock_change: true } : selectedDuration()),
+    ...(rebinding ? { confirm_clock_change: $("#clock-confirm").checked } : selectedDuration()),
   });
 });
 $("#share-current").addEventListener("click", async () => {
