@@ -9,11 +9,11 @@
     "node": ">=22.19.0 <25"
   },
   "scripts": {
-    "build": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build && pnpm --filter @zamery/pi-browser build",
-    "typecheck": "pnpm --filter @zamery/browser-provider typecheck && pnpm --filter @zamery/browser-firefox typecheck && pnpm --filter @zamery/pi-browser typecheck",
+    "build": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build && pnpm --filter @zamery/browser-mcp build && pnpm --filter @zamery/pi-browser build",
+    "typecheck": "pnpm --filter @zamery/browser-provider typecheck && pnpm --filter @zamery/browser-firefox typecheck && pnpm --filter @zamery/browser-mcp typecheck && pnpm --filter @zamery/pi-browser typecheck",
     "firefox:amo:prepare": "bash scripts/firefox-amo-listed.sh prepare",
     "firefox:amo:submit": "bash scripts/firefox-amo-listed.sh submit",
-    "test": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox test",
+    "test": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox test && pnpm --filter @zamery/browser-mcp test",
     "verify": "pnpm build && pnpm typecheck && pnpm test"
   },
   "devDependencies": {

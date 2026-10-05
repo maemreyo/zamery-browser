@@ -8,6 +8,7 @@ import {
   BROWSER_PROVIDER_V2_COMMON_CAPABILITIES,
   BROWSER_PROVIDER_V2_RECEIPT_SCHEMA,
   BROWSER_PROVIDER_V2_SEMANTICS_SCHEMA,
+  BROWSER_TAB_GROUP_PROVIDER_V1,
   BROWSER_TAB_PROVIDER_V1,
   BROWSER_TAB_PROVIDER_V1_CAPABILITIES,
   validateBrowserActionReceiptV2,
@@ -45,6 +46,14 @@ import {
   type BrowserProviderV2,
   type BrowserSnapshotV2,
   type BrowserTabCapabilityIdV1,
+  type BrowserTabGroupActivateValueV1,
+  type BrowserTabGroupCreateRequestV1,
+  type BrowserTabGroupMembershipRequestV1,
+  type BrowserTabGroupMoveRequestV1,
+  type BrowserTabGroupMutationBaseV1,
+  type BrowserTabGroupProviderV1,
+  type BrowserTabGroupUpdateRequestV1,
+  type BrowserTabGroupV1,
   type BrowserTabContextRequestV1,
   type BrowserTabCreateRequestV1,
   type BrowserTabNavigateRequestV1,
@@ -257,6 +266,31 @@ interface RawMutationResult {
 interface TrackedRef {
   observationId: string;
   target: BrowserTargetProvenanceV2;
+}
+
+
+function groupFrom(raw: unknown): BrowserTabGroupV1 {
+  const value = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    handle: stringOrEmpty(value.handle),
+    revision: typeof value.revision === "number" ? value.revision : 0,
+    windowId: typeof value.window_id === "number" ? value.window_id : null,
+    title: stringOrEmpty(value.title),
+    color: stringOrEmpty(value.color) || "grey",
+    collapsed: value.collapsed === true,
+    memberContextIds: stringList(value.member_context_ids),
+    incompleteMembership: value.incomplete_membership === true,
+    policy: value.policy === "follow_group" ? "follow_group" : "membership_snapshot",
+  };
+}
+
+/**
+ * A journal replay keeps only safe identifiers, not the full group view. Rebuild what is known and let the
+ * caller re-read the group (getTabGroup) when it needs title/color/membership.
+ */
+function groupFromResult(result: Record<string, unknown>): BrowserTabGroupV1 {
+  if (result.group && typeof result.group === "object") return groupFrom(result.group);
+  return groupFrom({ handle: result.group_handle, revision: result.group_revision, member_context_ids: result.member_context_ids });
 }
 
 function stringList(value: unknown): string[] {
@@ -484,7 +518,9 @@ export class FirefoxBrowserProviderV2 implements
   BrowserProviderV2,
   BrowserAuthorizationProviderV1,
   BrowserControlProviderV1,
-  BrowserTabProviderV1 {
+  BrowserTabProviderV1,
+  BrowserTabGroupProviderV1 {
+  readonly tabGroupProtocolVersion = BROWSER_TAB_GROUP_PROVIDER_V1;
   readonly authorizationProtocolVersion = BROWSER_AUTHORIZATION_PROVIDER_V1;
   readonly controlProtocolVersion = BROWSER_CONTROL_PROVIDER_V1;
   readonly tabProtocolVersion = BROWSER_TAB_PROVIDER_V1;
@@ -1173,6 +1209,84 @@ export class FirefoxBrowserProviderV2 implements
       op: "close_owned_tab",
       params: { context_id: request.contextId },
     }, options, () => undefined);
+  }
+
+
+  // ---- BrowserTabGroupProviderV1 ---------------------------------------------------------------------------
+
+  async listTabGroups(request: BrowserControlTargetV1, options: BrowserOperationOptionsV2 = {}): Promise<readonly BrowserTabGroupV1[]> {
+    const raw = await this.#controlRead(request, "group_list", {}, options);
+    return Array.isArray(raw.groups) ? raw.groups.map(groupFrom) : [];
+  }
+
+  async getTabGroup(
+    request: BrowserControlTargetV1 & { handle: string },
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserTabGroupV1> {
+    const raw = await this.#controlRead(request, "group_get", { handle: request.handle }, options);
+    return groupFrom(raw.group);
+  }
+
+  createTabGroup(request: BrowserTabGroupCreateRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.create",
+      op: "group_create",
+      params: { context_ids: [...request.contextIds], ...(request.title !== undefined ? { title: request.title } : {}), ...(request.color ? { color: request.color } : {}) },
+    }, options, groupFromResult);
+  }
+
+  updateTabGroup(request: BrowserTabGroupUpdateRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.update",
+      op: "group_update",
+      params: {
+        handle: request.handle,
+        ...(request.title !== undefined ? { title: request.title } : {}),
+        ...(request.color ? { color: request.color } : {}),
+        ...(request.collapsed !== undefined ? { collapsed: request.collapsed } : {}),
+      },
+    }, options, groupFromResult);
+  }
+
+  addTabsToGroup(request: BrowserTabGroupMembershipRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.add-tabs",
+      op: "group_add_tabs",
+      params: { handle: request.handle, context_ids: [...request.contextIds] },
+    }, options, groupFromResult);
+  }
+
+  removeTabsFromGroup(request: BrowserTabGroupMembershipRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1 | null>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.remove-tabs",
+      op: "group_remove_tabs",
+      params: { handle: request.handle, context_ids: [...request.contextIds] },
+    }, options, (result) => (result.group || result.group_handle ? groupFromResult(result) : null));
+  }
+
+  moveTabGroup(request: BrowserTabGroupMoveRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabGroupV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.move",
+      op: "group_move",
+      params: { handle: request.handle, index: request.index, ...(request.windowId !== undefined ? { window_id: request.windowId } : {}) },
+    }, options, groupFromResult);
+  }
+
+  activateTabGroup(
+    request: BrowserTabGroupMutationBaseV1 & { handle: string; contextId?: string },
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserControlResultV1<BrowserTabGroupActivateValueV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "group.activate",
+      op: "group_activate",
+      params: { handle: request.handle, ...(request.contextId ? { context_id: request.contextId } : {}) },
+    }, options, (result) => ({ group: groupFromResult(result), focusedContextId: stringOrEmpty(result.focused_context_id) }));
   }
 
   async close(): Promise<void> {
