@@ -1,18 +1,42 @@
+import { randomUUID } from "node:crypto";
+
 import {
+  BROWSER_AUTHORIZATION_PROVIDER_V1,
+  BROWSER_CONTROL_PROVIDER_V1,
+  BROWSER_CONTROL_RECEIPT_SCHEMA_V1,
   BROWSER_PROVIDER_V2,
   BROWSER_PROVIDER_V2_COMMON_CAPABILITIES,
   BROWSER_PROVIDER_V2_RECEIPT_SCHEMA,
   BROWSER_PROVIDER_V2_SEMANTICS_SCHEMA,
+  BROWSER_TAB_PROVIDER_V1,
+  BROWSER_TAB_PROVIDER_V1_CAPABILITIES,
   validateBrowserActionReceiptV2,
   type BrowserActionCapabilityIdV2,
   type BrowserActionSemanticsV2,
   type BrowserActionV2,
+  type BrowserAuthorizationActionV1,
+  type BrowserAuthorizationDetailV1,
+  type BrowserAuthorizationProviderV1,
+  type BrowserAuthorizationStateV1,
+  type BrowserClaimRequestV1,
+  type BrowserClaimValueV1,
   type BrowserContextCapabilitiesV2,
   type BrowserContextSummaryV2,
+  type BrowserControlErrorCodeV1,
+  type BrowserControlErrorV1,
+  type BrowserControlProviderV1,
+  type BrowserControlReceiptV1,
+  type BrowserControlResultV1,
+  type BrowserControlStateNameV1,
+  type BrowserControlStateV1,
+  type BrowserControlTargetV1,
   type BrowserDocumentProvenanceV2,
   type BrowserFreshnessV2,
+  type BrowserMutationOutcomeV2,
   type BrowserMutationRequestV2,
   type BrowserMutationResultV2,
+  type BrowserMutationStatusStateV1,
+  type BrowserMutationStatusV1,
   type BrowserOperationOptionsV2,
   type BrowserProviderDeclarationV2,
   type BrowserProviderErrorCodeV2,
@@ -20,11 +44,18 @@ import {
   type BrowserProviderStatusV2,
   type BrowserProviderV2,
   type BrowserSnapshotV2,
+  type BrowserTabCapabilityIdV1,
+  type BrowserTabContextRequestV1,
+  type BrowserTabCreateRequestV1,
+  type BrowserTabNavigateRequestV1,
+  type BrowserTabProviderV1,
+  type BrowserTabValueV1,
   type BrowserTargetProvenanceV2,
 } from "@zamery/browser-provider";
 
-import { sendFirefoxBrokerRequest } from "./client.js";
-import { listLiveFirefoxSessions, selectFirefoxSession } from "./session.js";
+import { normalizeAudienceId } from "./audience.js";
+import { isFirefoxBrokerTransportError, sendFirefoxBrokerRequest } from "./client.js";
+import { FirefoxSessionSelectionError, listLiveFirefoxSessions, selectFirefoxSession } from "./session.js";
 import type { FirefoxBrokerResponse, FirefoxSessionReceipt } from "./protocol.js";
 import type { FirefoxBrowserProviderOptions } from "./provider.js";
 
@@ -109,14 +140,36 @@ const PROVIDER_ERROR_CODES = new Set<BrowserProviderErrorCodeV2>([
   "PROVIDER_SESSION_CHANGED",
 ]);
 
+interface RawControlSummary {
+  state?: unknown;
+  claim_generation?: unknown;
+  claimed_context_id?: unknown;
+  claimed_by_you?: unknown;
+  reason?: unknown;
+  resume_requested?: unknown;
+}
+
 interface RawAuthorizationStatus {
   state?: unknown;
+  reason?: unknown;
   current_host_session_id?: unknown;
   granted_host_session_id?: unknown;
   granted_at?: unknown;
+  expires_at?: unknown;
+  grant_revision?: unknown;
+  duration_mode?: unknown;
+  duration_days?: unknown;
+  scope_kind?: unknown;
+  scope_count?: unknown;
+  actions?: unknown;
+  group_policy?: unknown;
+  protocol_compatible?: unknown;
+  control?: RawControlSummary;
 }
 
 interface RawStatus {
+  companion_extension_version?: unknown;
+  features?: Record<string, unknown>;
   authorization?: RawAuthorizationStatus;
 }
 
@@ -135,6 +188,16 @@ interface RawContext {
   availability?: RawContextAvailability;
 }
 
+interface RawMutationStatus {
+  request_id?: unknown;
+  state?: unknown;
+  outcome?: unknown;
+  op?: unknown;
+  started_at?: unknown;
+  completed_at?: unknown;
+  replay_horizon_ms?: unknown;
+}
+
 interface RawContextsResult {
   browser_instance_id?: unknown;
   contexts?: unknown;
@@ -145,8 +208,19 @@ interface RawSnapshotNode {
   role?: unknown;
   name?: unknown;
   tag?: unknown;
+  type?: unknown;
   value?: unknown;
   contenteditable?: unknown;
+  credential?: unknown;
+  checked?: unknown;
+  disabled?: unknown;
+}
+
+interface RawSnapshotCoverage {
+  truncated?: unknown;
+  node_limit?: unknown;
+  values_exported?: unknown;
+  hidden_controls_excluded?: unknown;
 }
 
 interface RawSnapshotResult {
@@ -157,6 +231,7 @@ interface RawSnapshotResult {
   document_identity?: unknown;
   url?: unknown;
   title?: unknown;
+  coverage?: RawSnapshotCoverage;
   nodes?: unknown;
 }
 
@@ -182,6 +257,18 @@ interface RawMutationResult {
 interface TrackedRef {
   observationId: string;
   target: BrowserTargetProvenanceV2;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/**
+ * Mint a request id the native host can age-check: `zq1-<ms in base36>-<random>`. Consumers should use one
+ * stable id per logical mutation so a reconnect can reconcile it instead of re-running it.
+ */
+export function createFirefoxRequestId(now: number = Date.now()): string {
+  return `zq1-${now.toString(36).padStart(8, "0")}-${randomUUID().replaceAll("-", "").slice(0, 18)}`;
 }
 
 function stringOrEmpty(value: unknown): string {
@@ -238,8 +325,13 @@ function assertOk(response: FirefoxBrokerResponse): unknown {
   return response.result;
 }
 
-function brokerOptions(options: BrowserOperationOptionsV2, id?: string): { id?: string; signal?: AbortSignal } {
+function brokerOptions(
+  options: BrowserOperationOptionsV2,
+  audienceId: string,
+  id?: string,
+): { id?: string; signal?: AbortSignal; audienceId: string } {
   return {
+    audienceId,
     ...(id === undefined ? {} : { id }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   };
@@ -292,17 +384,124 @@ function targetProvenance(
   };
 }
 
-export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
+
+const CONTROL_STATES = new Set<BrowserControlStateNameV1>(["no_access", "shared_idle", "agent_claimed", "user_control", "rebinding"]);
+const AUTH_STATES = new Set<BrowserAuthorizationStateV1>(["granted", "revoked", "expired", "rebind_required", "protocol_mismatch", "disconnected"]);
+const AUTH_ACTIONS = new Set<BrowserAuthorizationActionV1>(["inspect", "interact", "capture", "reorganize", "create_tab", "close_owned_tab"]);
+const MUTATION_STATUS_STATES = new Set<BrowserMutationStatusStateV1>(["in_flight", "completed", "outcome_unknown", "not_found", "outside_replay_horizon"]);
+const READ_RETRY = { attempts: 3, backoffMs: 150 } as const;
+
+function controlStateFrom(raw: RawControlSummary | undefined): BrowserControlStateV1 {
+  const state = typeof raw?.state === "string" && CONTROL_STATES.has(raw.state as BrowserControlStateNameV1)
+    ? raw.state as BrowserControlStateNameV1
+    : "no_access";
+  return {
+    state,
+    claimGeneration: typeof raw?.claim_generation === "number" ? raw.claim_generation : 0,
+    claimedContextId: nullableString(raw?.claimed_context_id),
+    claimedByYou: raw?.claimed_by_you === true,
+    reason: nullableString(raw?.reason),
+    resumeRequested: raw?.resume_requested === true,
+  };
+}
+
+/** Map a companion/broker failure onto the closed control error taxonomy. Reasons are companion-authored, never page text. */
+export function controlErrorFrom(code: unknown, reason: unknown, message: unknown): BrowserControlErrorV1 {
+  const r = typeof reason === "string" ? reason : undefined;
+  const text = typeof message === "string" && message ? message : r || "Firefox control request failed";
+  const make = (mapped: BrowserControlErrorCodeV1): BrowserControlErrorV1 => ({ code: mapped, message: text, ...(r ? { reason: r } : {}) });
+  switch (code) {
+    case "BROWSER_AUTHORIZATION_REQUIRED":
+      switch (r) {
+        case "private_window_denied": return make("PRIVATE_WINDOW_DENIED");
+        case "restricted_or_unsupported_page": return make("RESTRICTED_PAGE");
+        case "rebind_required": return make("REBIND_REQUIRED");
+        case "claim_required": return make("CLAIM_REQUIRED");
+        case "user_control": return make("USER_CONTROL_ACTIVE");
+        case "claimed_by_other_consumer": return make("CLAIM_CHANGED");
+        case "authorization_expired": return make("AUTHORIZATION_EXPIRED");
+        case "user_revoked": return make("AUTHORIZATION_REVOKED");
+        case "outside_scope":
+        case "action_outside_scope":
+        case "left_authorized_group":
+        case "partition_changed":
+        case "origin_changed_confirmation_required":
+          return make("OUTSIDE_SCOPE");
+        default:
+          return r?.endsWith("_not_granted") ? make("OUTSIDE_SCOPE") : make("AUTHORIZATION_REQUIRED");
+      }
+    case "STALE_ELEMENT_REF":
+      return make(r === "claim_changed" || r === "claim_context_changed" ? "CLAIM_CHANGED" : "STALE_OBSERVATION");
+    case "BROWSER_CONTEXT_GONE":
+    case "BROWSER_CONTEXT_NOT_FOUND":
+      return make("CONTEXT_GONE");
+    case "BROWSER_CONTEXT_UNAVAILABLE":
+      return make(r === "claimed_tab_not_focused" ? "FOCUS_CHANGED" : r === "no_normal_window_available" ? "RESTRICTED_PAGE" : "RESTRICTED_PAGE");
+    case "BROWSER_PROTOCOL_MISMATCH":
+      return make("PROTOCOL_MISMATCH");
+    case "COMPANION_NOT_READY":
+      return make("COMPANION_NOT_READY");
+    case "REQUEST_ID_CONFLICT":
+      return make("REQUEST_ID_CONFLICT");
+    case "REPLAY_HORIZON_EXPIRED":
+      return make("REPLAY_HORIZON_EXPIRED");
+    case "MUTATION_OUTCOME_UNKNOWN":
+    case "BROWSER_ACTION_RESPONSE_LOST":
+    case "BROKER_RESPONSE_TIMEOUT":
+    case "BROKER_EXITED":
+      return make("OUTCOME_UNKNOWN");
+    case "CONTEXT_NOT_OWNED":
+      return make("OUTSIDE_SCOPE");
+    case "UNSUPPORTED_OPERATION":
+    case "UNSUPPORTED_CAPABILITY":
+      return make("UNSUPPORTED_CAPABILITY");
+    case "INVALID_ARGUMENT":
+      return make("INVALID_ARGUMENT");
+    default:
+      return make("PROVIDER_ERROR");
+  }
+}
+
+function authorizationStateFrom(raw: RawAuthorizationStatus | undefined): BrowserAuthorizationStateV1 {
+  if (raw?.protocol_compatible === false) return "protocol_mismatch";
+  const state = raw?.state;
+  return typeof state === "string" && AUTH_STATES.has(state as BrowserAuthorizationStateV1)
+    ? state as BrowserAuthorizationStateV1
+    : "revoked";
+}
+
+function noAccessControl(): BrowserControlStateV1 {
+  return { state: "no_access", claimGeneration: 0, claimedContextId: null, claimedByYou: false, reason: null, resumeRequested: false };
+}
+
+function ownershipFor(raw: unknown): BrowserContextSummaryV2["ownership"] {
+  return raw === "provider-owned"
+    ? { owner: "provider", lifecycle: "provider-managed" }
+    : { owner: "user", lifecycle: "preserve" };
+}
+
+export class FirefoxBrowserProviderV2 implements
+  BrowserProviderV2,
+  BrowserAuthorizationProviderV1,
+  BrowserControlProviderV1,
+  BrowserTabProviderV1 {
+  readonly authorizationProtocolVersion = BROWSER_AUTHORIZATION_PROVIDER_V1;
+  readonly controlProtocolVersion = BROWSER_CONTROL_PROVIDER_V1;
+  readonly tabProtocolVersion = BROWSER_TAB_PROVIDER_V1;
   readonly protocolVersion = BROWSER_PROVIDER_V2;
   readonly #browserInstanceId: string | undefined;
   readonly #sessionMaxAgeMs: number | undefined;
   readonly #sessionsDir: string | undefined;
+  readonly #audienceId: string;
+  readonly #clientLabel: string | undefined;
   readonly #trackedRefs = new Map<string, TrackedRef>();
 
   constructor(options: FirefoxBrowserProviderOptions = {}) {
     this.#browserInstanceId = options.browserInstanceId;
     this.#sessionMaxAgeMs = options.sessionMaxAgeMs;
     this.#sessionsDir = options.sessionsDir;
+    this.#audienceId = normalizeAudienceId(options.audienceId || options.clientId);
+    this.#clientLabel = options.clientLabel;
   }
 
   async declaration(): Promise<BrowserProviderDeclarationV2> {
@@ -336,10 +535,19 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
     this.#trackedRefs.set(ref, observation);
   }
 
+  async #rawStatus(session: FirefoxSessionReceipt, options: BrowserOperationOptionsV2): Promise<RawStatus> {
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "status",
+      this.#clientLabel ? { client_label: this.#clientLabel } : {},
+      { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
+    );
+    return assertOk(response) as RawStatus;
+  }
+
   async status(options: BrowserOperationOptionsV2 = {}): Promise<BrowserProviderStatusV2> {
     const session = this.#sessionFor();
-    const response = await sendFirefoxBrokerRequest(session, "status", {}, brokerOptions(options));
-    const raw = assertOk(response) as RawStatus;
+    const raw = await this.#rawStatus(session, options);
     const auth = raw.authorization ?? {};
     return {
       protocolVersion: BROWSER_PROVIDER_V2,
@@ -377,7 +585,7 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
     if (!this.#sessionMatches(session, request.providerSessionId)) {
       throw Object.assign(new Error("Firefox provider session changed"), { code: "PROVIDER_SESSION_CHANGED" });
     }
-    const response = await sendFirefoxBrokerRequest(session, "list_contexts", {}, brokerOptions(options));
+    const response = await sendFirefoxBrokerRequest(session, "list_contexts", {}, { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY });
     const raw = assertOk(response) as RawContextsResult;
     const browserInstanceId = stringOrEmpty(raw.browser_instance_id) || request.browserInstanceId;
     const contexts = Array.isArray(raw.contexts) ? raw.contexts as RawContext[] : [];
@@ -385,7 +593,7 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
       browserInstanceId,
       providerSessionId: session.session_id,
       contextId: stringOrEmpty(context.context_id),
-      ownership: { owner: "user", lifecycle: "preserve" },
+      ownership: ownershipFor(context.ownership),
       title: stringOrEmpty(context.title),
       url: stringOrEmpty(context.url),
       active: context.active === true,
@@ -405,7 +613,7 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
       session,
       "snapshot",
       { context_id: request.contextId },
-      brokerOptions(options),
+      { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
     );
     const raw = assertOk(response) as RawSnapshotResult;
     const contextId = stringOrEmpty(raw.context_id) || request.contextId;
@@ -429,6 +637,10 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
         ...(typeof node.tag === "string" ? { tag: node.tag } : {}),
         ...(typeof node.value === "string" ? { value: node.value } : {}),
         ...(typeof node.contenteditable === "boolean" ? { contenteditable: node.contenteditable } : {}),
+        ...(typeof node.type === "string" ? { inputType: node.type } : {}),
+        ...(typeof node.checked === "boolean" ? { checked: node.checked } : {}),
+        ...(node.disabled === true ? { disabled: true } : {}),
+        ...(node.credential === true ? { credential: true } : {}),
       };
     });
     return {
@@ -440,6 +652,16 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
       title: stringOrEmpty(raw.title),
       target,
       freshness,
+      ...(raw.coverage
+        ? {
+            coverage: {
+              truncated: raw.coverage.truncated === true,
+              ...(typeof raw.coverage.node_limit === "number" ? { nodeLimit: raw.coverage.node_limit } : {}),
+              valuesExported: raw.coverage.values_exported === true,
+              hiddenControlsExcluded: raw.coverage.hidden_controls_excluded !== false,
+            },
+          }
+        : {}),
       nodes: mappedNodes,
     };
   }
@@ -490,12 +712,21 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
       };
     }
 
-    const response = await sendFirefoxBrokerRequest(
-      session,
-      "act",
-      { context_id: request.contextId, ...actionParams(request.action) },
-      brokerOptions(options, request.requestId),
-    );
+    let response: FirefoxBrokerResponse;
+    try {
+      response = await sendFirefoxBrokerRequest(
+        session,
+        "act",
+        { context_id: request.contextId, ...actionParams(request.action) },
+        brokerOptions(options, this.#audienceId, request.requestId),
+      );
+    } catch (error) {
+      if (!isFirefoxBrokerTransportError(error)) throw error;
+      // A lost response after dispatch is not a retryable error: the action may already have run.
+      return error.phase === "not_dispatched"
+        ? { outcome: "not_started", error: { code: "BROWSER_PROVIDER_ERROR", message: error.message, reason: "transport_not_dispatched" }, replayed: false }
+        : { outcome: "outcome_unknown", error: { code: "MUTATION_OUTCOME_UNKNOWN", message: error.message, reason: "transport_dispatch_unknown" }, replayed: false };
+    }
     if (!response.ok) {
       const outcome = response.outcome ?? "not_started";
       const error = errorFromResponse(response);
@@ -591,6 +822,357 @@ export class FirefoxBrowserProviderV2 implements BrowserProviderV2 {
       cancellation,
       replayed: response.replayed === true,
     };
+  }
+
+
+  // ---- BrowserAuthorizationProviderV1 ------------------------------------------------------------------
+
+  async authorizationDetail(
+    request: Partial<BrowserControlTargetV1> = {},
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserAuthorizationDetailV1> {
+    let session: FirefoxSessionReceipt;
+    try {
+      session = this.#sessionFor(request.browserInstanceId);
+    } catch (error) {
+      if (error instanceof FirefoxSessionSelectionError) {
+        return {
+          protocolVersion: BROWSER_AUTHORIZATION_PROVIDER_V1,
+          state: "disconnected",
+          reason: error.code === "BROWSER_INSTANCE_AMBIGUOUS" ? "multiple_browser_sessions" : "no_browser_session",
+          grantRevision: 0,
+          mode: null,
+          durationDays: null,
+          issuedAt: null,
+          expiresAt: null,
+          scope: { kind: null, count: 0 },
+          actions: [],
+          groupPolicy: null,
+          restartPolicy: "explicit_rebind",
+          protocolCompatible: true,
+          control: noAccessControl(),
+        };
+      }
+      throw error;
+    }
+    const raw = await this.#rawStatus(session, options);
+    const auth = raw.authorization ?? {};
+    const actions = Array.isArray(auth.actions)
+      ? auth.actions.filter((value): value is BrowserAuthorizationActionV1 => typeof value === "string" && AUTH_ACTIONS.has(value as BrowserAuthorizationActionV1))
+      : [];
+    const features: Record<string, boolean> = {};
+    for (const [key, value] of Object.entries(raw.features ?? {})) if (typeof value === "boolean") features[key] = value;
+    return {
+      protocolVersion: BROWSER_AUTHORIZATION_PROVIDER_V1,
+      state: authorizationStateFrom(auth),
+      reason: nullableString(auth.reason),
+      grantRevision: typeof auth.grant_revision === "number" ? auth.grant_revision : 0,
+      mode: auth.duration_mode === "session" || auth.duration_mode === "fixed" ? auth.duration_mode : null,
+      durationDays: nullableNumber(auth.duration_days),
+      issuedAt: nullableNumber(auth.granted_at),
+      expiresAt: nullableNumber(auth.expires_at),
+      scope: {
+        kind: auth.scope_kind === "tabs" || auth.scope_kind === "group" ? auth.scope_kind : null,
+        count: typeof auth.scope_count === "number" ? auth.scope_count : 0,
+      },
+      actions,
+      groupPolicy: auth.group_policy === "membership_snapshot" || auth.group_policy === "follow_group" ? auth.group_policy : null,
+      restartPolicy: "explicit_rebind",
+      protocolCompatible: auth.protocol_compatible !== false,
+      control: controlStateFrom(auth.control),
+      companion: { version: nullableString(raw.companion_extension_version), featureFlags: features },
+    };
+  }
+
+  // ---- control plumbing ------------------------------------------------------------------------------------
+
+  #controlSession(target: BrowserControlTargetV1): FirefoxSessionReceipt {
+    const session = this.#sessionFor(target.browserInstanceId);
+    if (!this.#sessionMatches(session, target.providerSessionId)) {
+      throw Object.assign(new Error("Firefox provider session changed"), { code: "PROVIDER_SESSION_CHANGED" });
+    }
+    return session;
+  }
+
+  #receipt(
+    session: FirefoxSessionReceipt,
+    requestId: string,
+    operation: string,
+    outcome: BrowserMutationOutcomeV2,
+    extra: { completedSubsteps?: readonly string[]; contextIds?: readonly string[]; focusedContextId?: string } = {},
+  ): BrowserControlReceiptV1 {
+    return {
+      receiptKind: "browser-control",
+      schemaVersion: BROWSER_CONTROL_RECEIPT_SCHEMA_V1,
+      protocolVersion: BROWSER_CONTROL_PROVIDER_V1,
+      providerId: PROVIDER_ID,
+      providerSessionId: session.session_id,
+      requestId,
+      operation,
+      outcome,
+      completedSubsteps: extra.completedSubsteps ?? [],
+      observedAt: Date.now(),
+      ...(extra.contextIds ? { contextIds: extra.contextIds } : {}),
+      ...(extra.focusedContextId ? { focusedContextId: extra.focusedContextId } : {}),
+    };
+  }
+
+  /**
+   * Run one durable control mutation. Transport loss after dispatch is `outcome_unknown`; it is never retried here.
+   * Reconciliation goes through mutationStatus with the same requestId.
+   */
+  async #controlMutation<T>(
+    target: BrowserControlTargetV1,
+    request: { requestId: string; operation: string; op: string; params: Record<string, unknown> },
+    options: BrowserOperationOptionsV2,
+    buildValue: (result: Record<string, unknown>) => T,
+  ): Promise<BrowserControlResultV1<T>> {
+    let session: FirefoxSessionReceipt;
+    try {
+      session = this.#controlSession(target);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      return {
+        outcome: "not_started",
+        error: {
+          code: code === "BROWSER_INSTANCE_NOT_FOUND" ? "HOST_MISSING" : code === "PROVIDER_SESSION_CHANGED" ? "TRANSPORT_DISCONNECTED" : "PROVIDER_ERROR",
+          message: (error as Error).message,
+          ...(code ? { reason: code.toLowerCase() } : {}),
+        },
+        replayed: false,
+      };
+    }
+    let response: FirefoxBrokerResponse;
+    try {
+      response = await sendFirefoxBrokerRequest(
+        session,
+        request.op,
+        request.params,
+        brokerOptions(options, this.#audienceId, request.requestId),
+      );
+    } catch (error) {
+      if (!isFirefoxBrokerTransportError(error)) throw error;
+      return error.phase === "not_dispatched"
+        ? { outcome: "not_started", error: { code: "TRANSPORT_DISCONNECTED", message: error.message, reason: "transport_not_dispatched" }, replayed: false }
+        : { outcome: "outcome_unknown", error: { code: "OUTCOME_UNKNOWN", message: error.message, reason: "transport_dispatch_unknown" }, replayed: false };
+    }
+    const replayed = response.replayed === true;
+    if (!response.ok) {
+      const error = controlErrorFrom(response.error?.code, response.error?.reason, response.error?.message);
+      const outcome = response.outcome ?? "not_started";
+      if (outcome === "partially_applied" || outcome === "outcome_unknown") {
+        return { outcome, error, replayed };
+      }
+      return { outcome: "not_started", error, replayed };
+    }
+    const result = (response.result && typeof response.result === "object" ? response.result : {}) as Record<string, unknown>;
+    if (result.outcome === "not_started") {
+      const raw = (result.error ?? {}) as { code?: unknown; reason?: unknown; message?: unknown };
+      return { outcome: "not_started", error: controlErrorFrom(raw.code, raw.reason, raw.message), replayed };
+    }
+    if (result.outcome === "partially_applied" || result.outcome === "outcome_unknown") {
+      const raw = (result.error ?? {}) as { code?: unknown; reason?: unknown; message?: unknown };
+      return {
+        outcome: result.outcome,
+        error: controlErrorFrom(raw.code, raw.reason, raw.message),
+        receipt: this.#receipt(session, request.requestId, request.operation, result.outcome, {
+          completedSubsteps: stringList(result.completed_substeps),
+        }),
+        replayed,
+      };
+    }
+    if (result.outcome !== undefined && result.outcome !== "completed") {
+      return {
+        outcome: "outcome_unknown",
+        error: { code: "PROVIDER_ERROR", message: `Firefox provider returned unexpected outcome: ${String(result.outcome)}` },
+        replayed,
+      };
+    }
+    const contextIds = stringList(result.member_context_ids);
+    const focused = typeof result.focused_context_id === "string" ? result.focused_context_id : undefined;
+    return {
+      outcome: "completed",
+      receipt: this.#receipt(session, request.requestId, request.operation, "completed", {
+        completedSubsteps: stringList(result.completed_substeps),
+        ...(contextIds.length > 0 ? { contextIds } : {}),
+        ...(focused ? { focusedContextId: focused } : {}),
+      }),
+      value: buildValue(result),
+      replayed,
+    };
+  }
+
+  // ---- BrowserControlProviderV1 ----------------------------------------------------------------------------
+
+  async #controlRead(
+    target: BrowserControlTargetV1,
+    op: string,
+    params: Record<string, unknown>,
+    options: BrowserOperationOptionsV2,
+  ): Promise<Record<string, unknown>> {
+    const session = this.#controlSession(target);
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      op,
+      params,
+      { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
+    );
+    return (assertOk(response) ?? {}) as Record<string, unknown>;
+  }
+
+  async controlState(request: BrowserControlTargetV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlStateV1> {
+    const session = this.#controlSession(request);
+    const raw = await this.#rawStatus(session, options);
+    return controlStateFrom(raw.authorization?.control);
+  }
+
+  async claim(request: BrowserClaimRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserClaimValueV1>> {
+    // A claim is itself a (non-durable) state change; it carries a fresh id so a retry is a new claim.
+    const requestId = createFirefoxRequestId();
+    return this.#controlMutationNonDurable(request, requestId, "control.claim", "control_claim", { context_id: request.contextId }, options, (result) => ({
+      contextId: stringOrEmpty(result.context_id) || request.contextId,
+      claimGeneration: typeof result.claim_generation === "number" ? result.claim_generation : 0,
+    }));
+  }
+
+  /** Claims are session state, not journaled mutations: a lost response is simply re-read via controlState. */
+  async #controlMutationNonDurable<T>(
+    target: BrowserControlTargetV1,
+    requestId: string,
+    operation: string,
+    op: string,
+    params: Record<string, unknown>,
+    options: BrowserOperationOptionsV2,
+    buildValue: (result: Record<string, unknown>) => T,
+  ): Promise<BrowserControlResultV1<T>> {
+    let session: FirefoxSessionReceipt;
+    try {
+      session = this.#controlSession(target);
+    } catch (error) {
+      return { outcome: "not_started", error: { code: "HOST_MISSING", message: (error as Error).message }, replayed: false };
+    }
+    let response: FirefoxBrokerResponse;
+    try {
+      response = await sendFirefoxBrokerRequest(session, op, params, brokerOptions(options, this.#audienceId, requestId));
+    } catch (error) {
+      if (!isFirefoxBrokerTransportError(error)) throw error;
+      return { outcome: "not_started", error: { code: "TRANSPORT_DISCONNECTED", message: error.message, reason: error.phase }, replayed: false };
+    }
+    if (!response.ok) {
+      return { outcome: "not_started", error: controlErrorFrom(response.error?.code, response.error?.reason, response.error?.message), replayed: false };
+    }
+    const result = (response.result && typeof response.result === "object" ? response.result : {}) as Record<string, unknown>;
+    return {
+      outcome: "completed",
+      receipt: this.#receipt(session, requestId, operation, "completed"),
+      value: buildValue(result),
+      replayed: response.replayed === true,
+    };
+  }
+
+  async release(request: BrowserControlTargetV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlStateV1> {
+    await this.#controlRead(request, "control_release", {}, options);
+    return this.controlState(request, options);
+  }
+
+  async requestUserTakeover(
+    request: BrowserControlTargetV1 & { note?: string },
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserControlStateV1> {
+    await this.#controlRead(request, "control_takeover", request.note ? { note: request.note } : {}, options);
+    return this.controlState(request, options);
+  }
+
+  async requestResume(request: BrowserControlTargetV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlStateV1> {
+    await this.#controlRead(request, "control_request_resume", {}, options);
+    return this.controlState(request, options);
+  }
+
+  async mutationStatus(
+    request: BrowserControlTargetV1 & { requestId: string },
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserMutationStatusV1> {
+    const raw = await this.#controlRead(request, "mutation_status", { request_id: request.requestId }, options) as RawMutationStatus;
+    const state = typeof raw.state === "string" && MUTATION_STATUS_STATES.has(raw.state as BrowserMutationStatusStateV1)
+      ? raw.state as BrowserMutationStatusStateV1
+      : "not_found";
+    const outcome = raw.outcome === "completed" || raw.outcome === "not_started" || raw.outcome === "partially_applied" || raw.outcome === "outcome_unknown"
+      ? raw.outcome
+      : undefined;
+    return {
+      requestId: request.requestId,
+      state,
+      ...(outcome ? { outcome } : {}),
+      ...(typeof raw.op === "string" ? { operation: raw.op } : {}),
+      ...(typeof raw.started_at === "number" ? { startedAt: raw.started_at } : {}),
+      ...(typeof raw.completed_at === "number" ? { completedAt: raw.completed_at } : {}),
+      replayHorizonMs: typeof raw.replay_horizon_ms === "number" ? raw.replay_horizon_ms : 0,
+    };
+  }
+
+  // ---- BrowserTabProviderV1 --------------------------------------------------------------------------------
+
+  async tabCapabilities(request: BrowserControlTargetV1, options: BrowserOperationOptionsV2 = {}): Promise<readonly BrowserTabCapabilityIdV1[]> {
+    const detail = await this.authorizationDetail(request, options);
+    if (detail.state !== "granted") return [];
+    const ids: BrowserTabCapabilityIdV1[] = [];
+    if (detail.actions.includes("create_tab")) ids.push("tab.create");
+    if (detail.actions.includes("create_tab")) ids.push("tab.navigate", "tab.reload");
+    if (detail.actions.includes("interact")) ids.push("tab.activate");
+    if (detail.actions.includes("close_owned_tab")) ids.push("tab.close-owned");
+    return BROWSER_TAB_PROVIDER_V1_CAPABILITIES.filter((id) => ids.includes(id));
+  }
+
+  #tabValue(result: Record<string, unknown>, fallbackContextId = ""): BrowserTabValueV1 {
+    return {
+      contextId: stringOrEmpty(result.context_id) || fallbackContextId,
+      ownership: result.ownership === "provider-owned" ? "provider-owned" : "user-owned",
+    };
+  }
+
+  createTab(request: BrowserTabCreateRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabValueV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "tab.create",
+      op: "create_tab",
+      params: { url: request.url, active: request.active === true },
+    }, options, (result) => this.#tabValue(result));
+  }
+
+  navigateTab(request: BrowserTabNavigateRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabValueV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "tab.navigate",
+      op: "navigate_tab",
+      params: { context_id: request.contextId, url: request.url },
+    }, options, (result) => this.#tabValue(result, request.contextId));
+  }
+
+  reloadTab(request: BrowserTabContextRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabValueV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "tab.reload",
+      op: "reload_tab",
+      params: { context_id: request.contextId },
+    }, options, (result) => this.#tabValue(result, request.contextId));
+  }
+
+  activateTab(request: BrowserTabContextRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<BrowserTabValueV1>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "tab.activate",
+      op: "activate_tab",
+      params: { context_id: request.contextId },
+    }, options, (result) => this.#tabValue(result, request.contextId));
+  }
+
+  closeOwnedTab(request: BrowserTabContextRequestV1, options: BrowserOperationOptionsV2 = {}): Promise<BrowserControlResultV1<undefined>> {
+    return this.#controlMutation(request, {
+      requestId: request.requestId,
+      operation: "tab.close-owned",
+      op: "close_owned_tab",
+      params: { context_id: request.contextId },
+    }, options, () => undefined);
   }
 
   async close(): Promise<void> {

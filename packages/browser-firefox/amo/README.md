@@ -12,13 +12,18 @@ The currently distributed Mozilla-signed companion is `0.1.2` on the unlisted/se
 
 Only these files belong in the production submission:
 
+The file set is derived from `manifest.json` by `scripts/firefox-amo-listed.sh` (background scripts, content scripts, popup page and script, and the manifest itself), so it cannot drift from what the extension loads. Today that is:
+
 - `asset-discovery-v1.js`
 - `asset-transfer-v1.js`
 - `background.js`
 - `content.js`
+- `control-ops.js`
 - `manifest.json`
+- `policy.js`
 - `popup.html`
 - `popup.js`
+- `start.js`
 
 Do not include development manifests, experimental assets, repository state, credentials, or temporary signing files.
 

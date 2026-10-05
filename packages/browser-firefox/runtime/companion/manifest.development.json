@@ -20,10 +20,12 @@
     "<all_urls>",
     "nativeMessaging",
     "storage",
+    "tabGroups",
     "tabs"
   ],
+  "incognito": "not_allowed",
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["policy.js", "background.js", "control-ops.js", "start.js"],
     "persistent": true
   },
   "browser_action": {

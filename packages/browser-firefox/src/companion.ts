@@ -4,17 +4,25 @@ export const FIREFOX_COMPANION_AUTH_STATUS_MESSAGE = "zamery_browser_firefox_aut
 export const FIREFOX_COMPANION_GRANT_MESSAGE = "zamery_browser_firefox_grant";
 export const FIREFOX_COMPANION_REVOKE_MESSAGE = "zamery_browser_firefox_revoke";
 
-export const FIREFOX_COMPANION_PROTOCOL_VERSION = 1 as const;
-export const FIREFOX_COMPANION_AUTHORIZATION_TTL_MS = 24 * 60 * 60 * 1000;
+export const FIREFOX_COMPANION_PROTOCOL_VERSION = 2 as const;
+export const FIREFOX_COMPANION_AUTHORIZATION_FIXED_DAY_PRESETS = [1, 3, 7, 14, 30] as const;
+export const FIREFOX_COMPANION_AUTHORIZATION_MAX_CUSTOM_DAYS = 30 as const;
 
-export type FirefoxCompanionAuthorizationState = "granted" | "revoked";
+export type FirefoxCompanionAuthorizationState = "granted" | "revoked" | "expired" | "rebind_required";
 
 export interface FirefoxCompanionAuthorizationStatus {
   state: FirefoxCompanionAuthorizationState;
+  reason?: string | null;
   current_host_session_id: string | null;
   granted_host_session_id: string | null;
   granted_at: number | null;
   expires_at: number | null;
+  grant_revision?: number;
+  audience_id?: string | null;
+  duration_mode?: "session" | "fixed" | null;
+  duration_days?: number | null;
+  scope_kind?: "tabs" | "group" | null;
+  scope_count?: number;
   expected_protocol_version: typeof FIREFOX_COMPANION_PROTOCOL_VERSION;
   current_host_protocol_version: number | null;
   protocol_compatible: boolean;

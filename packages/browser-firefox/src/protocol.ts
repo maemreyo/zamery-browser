@@ -1,4 +1,4 @@
-export const FIREFOX_BROKER_PROTOCOL_VERSION = 1 as const;
+export const FIREFOX_BROKER_PROTOCOL_VERSION = 2 as const;
 export const DEFAULT_FIREFOX_SESSION_MAX_AGE_MS = 15_000;
 export const DEFAULT_FIREFOX_BROKER_TIMEOUT_MS = 40_000;
 export const MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES = 256 * 1024;
@@ -22,6 +22,7 @@ export interface FirefoxBrokerRequest {
   id: string;
   op: string;
   params?: Record<string, unknown>;
+  audience_id?: string;
 }
 
 export interface FirefoxBrokerResponse {

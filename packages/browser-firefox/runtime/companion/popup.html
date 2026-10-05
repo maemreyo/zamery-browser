@@ -1,21 +1,107 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Zamery Browser Firefox</title>
+<title>Zamery Browser</title>
 <style>
-body{font:13px system-ui,sans-serif;min-width:320px;margin:14px}button{margin-right:8px;padding:6px 10px}code{font-size:11px;word-break:break-all}#state{font-weight:600;margin-bottom:8px}.muted{opacity:.7}.error{color:#b00020}.row{margin:7px 0}
+:root { color-scheme: light dark; --fg:#1b1b1f; --muted:#5c5c66; --bg:#fff; --card:#f4f4f7; --line:#d9d9e0; --ok:#0a7a3d; --warn:#9a5b00; --bad:#b00020; --accent:#2457d6; }
+@media (prefers-color-scheme: dark) { :root { --fg:#f1f1f4; --muted:#a8a8b3; --bg:#1f1f24; --card:#2a2a31; --line:#40404a; --ok:#58d68d; --warn:#f0b35a; --bad:#ff7a8a; --accent:#7aa2ff; } }
+* { box-sizing: border-box; }
+body { font: 13px/1.45 system-ui, sans-serif; color: var(--fg); background: var(--bg); width: 360px; margin: 0; padding: 14px; }
+h1 { font-size: 14px; margin: 0 0 2px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
+.muted { color: var(--muted); }
+.row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 8px 0; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+label { display: flex; gap: 8px; align-items: flex-start; }
+select, input[type=number] { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.list { max-height: 150px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; background: var(--bg); }
+.list label { margin: 4px 0; }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.error { color: var(--bad); margin: 8px 0; }
+.hidden { display: none; }
+details { margin-top: 12px; } summary { cursor: pointer; color: var(--muted); }
+code { font-size: 11px; overflow-wrap: anywhere; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
 </style>
 </head>
 <body>
-<div id="state">Loading…</div>
-<div id="protocol" class="row muted">Protocol: —</div>
-<div class="muted">Grant is bound to the current native-host session and expires after 24 hours at most.</div>
-<p><code id="session">—</code></p>
-<div id="expiry" class="row muted"></div>
-<div id="error" class="row error"></div>
-<button id="grant" type="button">Grant current session</button>
-<button id="revoke" type="button">Revoke</button>
+<h1>Zamery Browser</h1>
+<div class="pill" id="connection"><span class="dot" id="connection-dot"></span><span id="connection-text">Checking…</span></div>
+<div class="muted" id="connection-detail"></div>
+
+<div id="error" class="error" role="alert"></div>
+
+<section id="granted" class="hidden">
+  <div class="card">
+    <div class="pill"><span class="dot" id="control-dot"></span><span id="control-text"></span></div>
+    <div class="muted" id="control-detail"></div>
+    <div class="muted" id="agent-note"></div>
+    <div class="actions">
+      <button id="takeover" type="button">Take over</button>
+      <button id="resume" type="button" class="primary">Resume agent</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="title" id="shared-summary"></div>
+    <div class="sub" id="shared-expiry"></div>
+    <div class="sub" id="shared-actions"></div>
+    <div class="actions"><button id="share-current" type="button">Also share this tab</button><button id="revoke" type="button" class="danger">Stop sharing</button></div>
+  </div>
+  <div id="pending" class="hidden">
+    <h2>Site changed</h2>
+    <div id="pending-list"></div>
+  </div>
+</section>
+
+<section id="picker" class="hidden">
+  <div id="rebind-note" class="card hidden"></div>
+  <h2>Agent</h2>
+  <div class="row"><select id="agent" aria-label="Local agent"></select></div>
+  <div class="sub" id="agent-hint"></div>
+
+  <h2>Share</h2>
+  <div id="tabs" class="list" role="group" aria-label="Tabs to share"></div>
+  <div id="groups-block" class="hidden">
+    <div id="groups" class="list" style="margin-top:6px" role="group" aria-label="Tab groups to share"></div>
+    <div id="group-policy" class="hidden">
+      <label><input type="radio" name="group-policy" value="membership_snapshot" checked> <span>Only these tabs while they stay in the group. New tabs are not shared.</span></label>
+      <label><input type="radio" name="group-policy" value="follow_group"> <span>New tabs added to the group are shared too.</span></label>
+    </div>
+  </div>
+
+  <h2>Allow</h2>
+  <label><input type="checkbox" checked disabled> <span>Read the page</span></label>
+  <label><input type="checkbox" id="act-interact" checked> <span>Click, type and press keys</span></label>
+  <label><input type="checkbox" id="act-capture" checked> <span>Take screenshots</span></label>
+  <label><input type="checkbox" id="act-reorganize"> <span>Reorganize these tabs and groups</span></label>
+  <label><input type="checkbox" id="act-create"> <span>Open and close tabs it creates itself</span></label>
+
+  <h2>For how long</h2>
+  <div class="row">
+    <select id="duration" aria-label="Duration">
+      <option value="session">This session</option>
+      <option value="1">1 day</option><option value="3">3 days</option><option value="7">7 days</option>
+      <option value="14">14 days</option><option value="30">30 days</option><option value="custom">Custom…</option>
+    </select>
+    <input id="custom-days" type="number" min="1" max="30" step="1" value="2" class="hidden" aria-label="Custom days (1 to 30)">
+  </div>
+  <div class="sub" id="expiry-preview"></div>
+  <div class="actions"><button id="grant" type="button" class="primary">Share selected</button></div>
+</section>
+
+<details>
+  <summary>Diagnostics</summary>
+  <div class="sub" id="diagnostics"></div>
+</details>
 <script src="popup.js"></script>
 </body>
 </html>
