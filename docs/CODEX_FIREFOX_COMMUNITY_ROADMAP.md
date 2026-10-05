@@ -2,6 +2,8 @@
 
 Status: **GO WITH CHANGES for the revised implementation plan; current code is NO-GO for the community technical-preview gate.** Validated 2026-10-05 against HEAD `89736c469fca46b98d0022de176f76f7f3c82017`.
 
+> **Implementation status (2026-10-05):** P0 and most of P1 are implemented on `main`; the evidence-backed status of every preview-gate row, the live Firefox results and what is still missing (signed XPI, clean-machine install, real authenticated profile) are in [Technical preview status](technical-preview.md). The text below remains the design record.
+
 This document is implementation design, not evidence that the features or security fixes already exist. See the [deep validation review](CODEX_FIREFOX_COMMUNITY_VALIDATION_2026-10-05.md) for findings F01-F15, exact code observations, primary sources S1-S27, contract recommendations, failure models and acceptance matrix.
 
 ## 1. Goal and product boundary

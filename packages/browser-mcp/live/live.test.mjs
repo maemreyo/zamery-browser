@@ -520,3 +520,26 @@ describe("live Firefox: trusted human gestures (Marionette-synthesized input)", 
     note("trusted-human-click", { control: "user_control" });
   });
 });
+
+describe("live Firefox: nothing sensitive reached disk", () => {
+  it("typed values, refused secrets and page canaries are absent from the journal, host log and artifact metadata", async () => {
+    const roots = [live.dirs.state, live.dirs.install, path.join(live.dirs.root, "artifacts")];
+    const secrets = ["Agent Name", "agent-user", "agent-must-not-type-this", "typed by a human", "PREFILLED-NAME-CANARY", "PREFILLED-PASSWORD-CANARY", "HIDDEN-CSRF-CANARY"];
+    const scanned = [];
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name);
+        const stat = fs.statSync(full);
+        if (stat.isDirectory()) { walk(full); continue; }
+        if (/\.(png|jpg)$/.test(name)) continue; // pixel bytes are the artifact itself, not metadata
+        scanned.push(full);
+        const content = fs.readFileSync(full, "utf8");
+        for (const secret of secrets) assert.ok(!content.includes(secret), `${secret} found in ${full}`);
+      }
+    };
+    roots.forEach(walk);
+    assert.ok(scanned.some((file) => /mutation-journal-v2/.test(file)), "a journal exists and was scanned");
+    note("canary-scan", { filesScanned: scanned.length, secretsChecked: secrets.length, found: 0 });
+  });
+});

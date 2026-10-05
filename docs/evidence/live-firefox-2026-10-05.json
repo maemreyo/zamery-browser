@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-05T16:15:39.674Z",
+  "at": "2026-10-05T16:28:57.901Z",
   "firefox": {
     "name": "environment",
     "firefox": "157.0",
@@ -128,8 +128,25 @@
       "name": "firefox-restart",
       "stateAfterRestart": "rebind_required",
       "reason": "restart",
-      "deadlineAfterRestart": "2026-10-08T16:15:29.895Z",
-      "originalDeadline": "2026-10-08T16:15:29.895Z"
+      "deadlineAfterRestart": "2026-10-08T16:28:47.053Z",
+      "originalDeadline": "2026-10-08T16:28:47.053Z"
+    },
+    {
+      "name": "trusted-human-input",
+      "source": "Marionette element send keys (isTrusted=true)",
+      "control": "human_interaction",
+      "agentWriteBlocked": true,
+      "humanTextPreserved": true
+    },
+    {
+      "name": "trusted-human-click",
+      "control": "user_control"
+    },
+    {
+      "name": "canary-scan",
+      "filesScanned": 5,
+      "secretsChecked": 7,
+      "found": 0
     }
   ]
 }

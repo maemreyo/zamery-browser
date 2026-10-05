@@ -18,22 +18,23 @@ Node.js `>=22.19.0 <25` is currently supported. `@zamery/pi-browser` is tested a
 | --- | --- |
 | `@zamery/browser-provider` | Provider-neutral BrowserProvider V1/V2 contracts, plus optional bounded browser-asset contracts. |
 | `@zamery/pi-browser` | Typed Pi tools for status, contexts, semantic snapshots, browser-backed assets, and actions. |
-| `@zamery/browser-firefox` | Firefox provider and Native Messaging host for an already-running Firefox session. |
+| `@zamery/browser-firefox` | Firefox provider, Native Messaging host, `setup`/`doctor` CLI and the Firefox companion for an already-running Firefox session. |
+| `@zamery/browser-mcp` | Standalone stdio MCP server (for Codex and other local MCP hosts): share chosen tabs/tab groups, snapshots, DOM actions, takeover/resume, screenshots. |
 
 ## Architecture
 
 ```text
-AI / Pi agent
-     |
-@zamery/pi-browser
-     |
-BrowserProvider contract
-     |
-@zamery/browser-firefox
-     |
-Native Messaging + signed companion
-     |
-Your existing Firefox
+AI / Pi agent                 Codex / local MCP host
+     |                               |
+@zamery/pi-browser            @zamery/browser-mcp
+     |                               |
+     +-- BrowserProvider V2 + optional interfaces --+
+                         |
+              @zamery/browser-firefox
+                         |
+         Native Messaging + signed companion
+                         |
+              Your existing Firefox
 ```
 
 The provider contract is intentionally separate from the Firefox implementation. Another browser/provider can implement the same contract without changing the agent-facing tool layer.
@@ -54,6 +55,10 @@ try {
 
 For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_contexts`, `browser_snapshot`, `browser_assets`, and `browser_act`. `browser_assets` returns opaque refs and safe metadata rather than source URLs or browser credentials.
 
+## Codex and other MCP hosts (technical preview in development)
+
+`@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [technical preview status](docs/technical-preview.md). The preview is not released: it needs a signed protocol-2 companion and a clean-machine acceptance run first.
+
 ## Why this exists
 
 Browser automation often hides important distinctions: whether the browser is user-owned, whether an action really happened, whether a DOM reference is still fresh, or whether a timeout occurred before or after mutation began. Zamery Browser keeps those boundaries explicit.
@@ -67,7 +72,7 @@ Browser automation often hides important distinctions: whether the browser is us
 
 ## Firefox companion
 
-The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. The companion is currently distributed as a signed, unlisted add-on rather than a public AMO listing. See [Firefox setup](docs/firefox-setup.md).
+The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. The currently distributed signed companion is `0.1.x` (wire protocol 1); the protocol-2 companion `0.2.0` in this repository is not yet signed or published and is intentionally incompatible with protocol-1 components (they fail closed together). See [Firefox setup](docs/firefox-setup.md).
 
 ## Documentation
 
@@ -75,6 +80,7 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Architecture](docs/architecture.md)
 - [Firefox setup](docs/firefox-setup.md)
 - [Security model](docs/security-model.md)
+- [Technical preview status](docs/technical-preview.md)
 - [Codex + Firefox community roadmap](docs/CODEX_FIREFOX_COMMUNITY_ROADMAP.md)
 - [Security policy](SECURITY.md)
 - [Privacy policy](PRIVACY.md)
