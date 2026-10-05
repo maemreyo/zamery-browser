@@ -1,6 +1,6 @@
 {
   "name": "@zamery/browser-mcp",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "type": "module",
   "description": "Standalone MCP server that lets a local agent use a user's already-running Firefox through the Zamery BrowserProvider V2 contracts.",
   "bin": {
@@ -15,7 +15,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "codex"
   ],
   "engines": {
     "node": ">=22.19.0 <25"
