@@ -62,11 +62,11 @@ Consequence: preview acceptance is tied to a tested **Codex surface/build + inst
 
 `pnpm release:tuple` prints the tuple for the working tree: git SHA (+ dirty flag), npm package versions, companion version and a hash of the exact files that would be staged for AMO, signed XPI SHA-256 (with `--xpi`), native wire protocol, BrowserProvider protocol, installed Firefox, Node, macOS build/arch and the Codex CLI. These are different numbers on purpose: package semver, companion version, wire protocol, MCP protocol and provider protocol move independently.
 
-Current source tuple (unsigned): packages provider 0.2.0 / firefox 0.2.0 / mcp 0.1.0 / pi 0.2.0; companion 0.2.0 (protocol 2; the distributed signed companion is 0.1.x, protocol 1); native wire 2; journal schema 2. No signed XPI, no published npm artifacts.
+Release candidate (2026-10-06): npm `@zamery/browser-provider@0.2.2-rc.1`, `@zamery/browser-firefox@0.2.1-rc.1`, `@zamery/browser-mcp@0.1.0-rc.1` (publish under dist-tag `preview`, never `latest`; accept by exact version pin). `@zamery/pi-browser` is not part of this gate. Signed companion `0.2.0`: `f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3`, Mozilla signature present, extension id `zamery-browser-firefox@zamery.local`, source hash `f07ffd81cd9bd04788291c672007c188e5fe618843a1995fc8f076cdf063e56f` (the RC bump changes package metadata only; the companion files are byte-identical to those in the signed XPI). Native wire 2, journal schema 2. The release tuple must record the final git SHA together with the XPI SHA.
 
 ## What blocks GO
 
-1. A Mozilla-signed protocol-2 companion (AMO credentials are not available in this environment).
+1. ~~A Mozilla-signed protocol-2 companion~~ — done (unlisted, see above).
 2. A clean-machine install of the published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
 3. A run against the user's real, already-authenticated Firefox profile with the signed companion.
 
