@@ -534,7 +534,8 @@ function settlePending(id, value) {
 
 function handleNative(value) {
   if (!value || typeof value !== "object") return;
-  console.error(`[zamery-browser-firefox-host] native message type=${String(value.type || "unknown")}`);
+  // Heartbeats arrive every few seconds; logging them grew the stderr log without bound.
+  if (value.type !== "heartbeat") console.error(`[zamery-browser-firefox-host] native message type=${String(value.type || "unknown")}`);
   if (value.type === "hello") {
     session = {
       ...session,
@@ -578,7 +579,6 @@ function parseNativeInput(chunk) {
 }
 
 process.stdin.on("data", (chunk) => {
-  console.error(`[zamery-browser-firefox-host] stdin data bytes=${chunk.length}`);
   try {
     parseNativeInput(chunk);
   } catch (error) {

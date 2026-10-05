@@ -1578,6 +1578,7 @@ async function snapshotContext(params, audienceId) {
     url: snapshot?.url,
     title: snapshot?.title,
     coverage: snapshot?.coverage || { truncated: false },
+    text_blocks: Array.isArray(snapshot?.text_blocks) ? snapshot.text_blocks.slice(0, 120) : [],
     control: { ...controlSummary(audienceId), claimed_now: claim.claimed, claim_refused_reason: claim.claimed ? null : claim.reason },
     nodes,
   };

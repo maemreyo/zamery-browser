@@ -49,7 +49,7 @@ describe("screenshot artifacts through the real stack", () => {
     const dir = path.join(artifactRoot, audienceDir);
     assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
     for (const name of fs.readdirSync(dir)) assert.equal(fs.statSync(path.join(dir, name)).mode & 0o777, 0o600, name);
-    assert.deepEqual(fs.readdirSync(dir).sort(), [`${d.artifactId}.bin`, `${d.artifactId}.json`]);
+    assert.deepEqual(fs.readdirSync(dir).sort(), [`${d.artifactId}.json`, `${d.artifactId}.png`]);
     assert.ok(!fs.readFileSync(path.join(dir, `${d.artifactId}.json`), "utf8").includes("a.test"), "metadata carries no URL or title");
 
     const read = await provider.readArtifact(d.artifactId);
@@ -68,7 +68,7 @@ describe("screenshot artifacts through the real stack", () => {
     const d = (await shot(provider, target)).value;
     await stack.company.popup({ type: "zamery_browser_firefox_revoke" });
     await assert.rejects(provider.readArtifact(d.artifactId), (error) => error.code === "ARTIFACT_EXPIRED" && error.reason === "authority_ended");
-    assert.deepEqual(files(artifactRoot).filter((name) => name.endsWith(".bin")), [], "bytes were deleted on the failed read");
+    assert.deepEqual(files(artifactRoot).filter((name) => /\.(png|jpg)$/.test(name)), [], "bytes were deleted on the failed read");
 
     await stack.company.popup({ type: "zamery_browser_firefox_grant", audience_id: AUD, tab_ids: [1] });
     const second = (await shot(provider, target)).value;
@@ -77,15 +77,18 @@ describe("screenshot artifacts through the real stack", () => {
     await assert.rejects(provider.readArtifact(second.artifactId), (error) => error.code === "ARTIFACT_EXPIRED");
   });
 
-  it("expires by time and detects on-disk tampering", async () => {
-    const { provider, target, artifactRoot } = await boot({ lifetimeMs: 150 });
+  it("expires by time", async () => {
+    const { provider, target } = await boot({ lifetimeMs: 300 });
     const d = (await shot(provider, target)).value;
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 450));
     await assert.rejects(provider.readArtifact(d.artifactId), (error) => error.code === "ARTIFACT_EXPIRED");
+  });
 
+  it("detects on-disk tampering", async () => {
+    const { provider, target, artifactRoot } = await boot();
     const e = (await shot(provider, target)).value;
     const [audienceDir] = fs.readdirSync(artifactRoot);
-    fs.appendFileSync(path.join(artifactRoot, audienceDir, `${e.artifactId}.bin`), "x");
+    fs.appendFileSync(path.join(artifactRoot, audienceDir, `${e.artifactId}.png`), "x");
     await assert.rejects(provider.readArtifact(e.artifactId), (error) => error.code === "ARTIFACT_INTEGRITY_MISMATCH");
   });
 
@@ -93,7 +96,7 @@ describe("screenshot artifacts through the real stack", () => {
     const { provider, target, artifactRoot, stack } = await boot();
     const d = (await shot(provider, target)).value;
     const [audienceDir] = fs.readdirSync(artifactRoot);
-    const bin = path.join(artifactRoot, audienceDir, `${d.artifactId}.bin`);
+    const bin = path.join(artifactRoot, audienceDir, `${d.artifactId}.png`);
     const secret = path.join(stack.roots.root, "secret.txt");
     fs.writeFileSync(secret, "TOP-SECRET");
     fs.rmSync(bin);
@@ -127,14 +130,29 @@ describe("screenshot artifacts through the real stack", () => {
     const result = await shot(provider, target);
     assert.equal(result.outcome, "not_started");
     assert.equal(result.error.code, "ARTIFACT_INTEGRITY_MISMATCH");
-    assert.deepEqual(files(artifactRoot).filter((name) => name.endsWith(".bin") || name.endsWith(".json")), []);
+    assert.deepEqual(files(artifactRoot).filter((name) => /\.(png|jpg)$/.test(name) || name.endsWith(".json")), []);
   });
 
   it("provider.close removes this consumer's artifacts", async () => {
     const { provider, target, artifactRoot } = await boot();
     await shot(provider, target);
-    assert.ok(files(artifactRoot).some((name) => name.endsWith(".bin")));
+    assert.ok(files(artifactRoot).some((name) => /\.(png|jpg)$/.test(name)));
     await provider.close();
-    assert.deepEqual(files(artifactRoot).filter((name) => name.endsWith(".bin")), []);
+    assert.deepEqual(files(artifactRoot).filter((name) => /\.(png|jpg)$/.test(name)), []);
+  });
+});
+
+describe("materialized artifact path", () => {
+  it("returns only the managed, verified file and refuses after authority ends", async () => {
+    const { stack, provider, target, artifactRoot } = await boot();
+    const d = (await shot(provider, target)).value;
+    const { path: file } = await provider.materializeArtifact(d.artifactId);
+    assert.ok(file.startsWith(artifactRoot) && file.endsWith(`${d.artifactId}.png`));
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    assert.deepEqual(fs.readFileSync(file).subarray(0, 4), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    await assert.rejects(provider.materializeArtifact("/etc/passwd"), (error) => error.code === "ARTIFACT_NOT_FOUND");
+    await stack.company.popup({ type: "zamery_browser_firefox_revoke" });
+    await assert.rejects(provider.materializeArtifact(d.artifactId), (error) => error.code === "ARTIFACT_EXPIRED");
+    assert.equal(fs.existsSync(file), false);
   });
 });

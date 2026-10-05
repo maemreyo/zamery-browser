@@ -65,9 +65,11 @@ export class ArtifactStore {
     return this.#lifetimeMs;
   }
 
-  #paths(id: string): { bin: string; meta: string } {
+  /** Bytes live in `<id>.png|jpg` so a host with an image viewer can open the file; metadata in `<id>.json`. */
+  #paths(id: string, mediaType: string = "image/png"): { bin: string; meta: string } {
     if (!ARTIFACT_ID_PATTERN.test(id)) throw new ArtifactError("ARTIFACT_NOT_FOUND", "invalid_artifact_id", "unknown artifact id");
-    return { bin: path.join(this.#dir, `${id}.bin`), meta: path.join(this.#dir, `${id}.json`) };
+    const ext = mediaType === "image/jpeg" ? "jpg" : "png";
+    return { bin: path.join(this.#dir, `${id}.${ext}`), meta: path.join(this.#dir, `${id}.json`) };
   }
 
   #writeExclusive(file: string, data: Uint8Array | string): void {
@@ -89,7 +91,7 @@ export class ArtifactStore {
     }
     this.sweep(data.byteLength);
     const stored: BrowserArtifactDescriptorV1 = { ...descriptor, expiresAt: Math.min(descriptor.expiresAt, this.#now() + this.#lifetimeMs) };
-    const { bin, meta } = this.#paths(descriptor.artifactId);
+    const { bin, meta } = this.#paths(descriptor.artifactId, descriptor.mediaType);
     // Bytes first, metadata last: a reader that finds metadata always finds complete bytes.
     this.#writeExclusive(bin, data);
     this.#writeExclusive(meta, `${JSON.stringify(stored)}\n`);
@@ -124,7 +126,7 @@ export class ArtifactStore {
 
   read(id: string): { descriptor: BrowserArtifactDescriptorV1; data: Uint8Array } {
     const descriptor = this.describe(id);
-    const { bin } = this.#paths(id);
+    const { bin } = this.#paths(id, descriptor.mediaType);
     let data: Buffer;
     try {
       const fd = fs.openSync(bin, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
@@ -147,10 +149,11 @@ export class ArtifactStore {
   }
 
   remove(id: string): void {
-    let paths: { bin: string; meta: string };
-    try { paths = this.#paths(id); } catch { return; }
+    let meta: string;
+    try { meta = this.#paths(id).meta; } catch { return; }
     // Metadata first so a concurrent reader can never see metadata without bytes.
-    for (const file of [paths.meta, paths.bin]) {
+    const files = [meta, path.join(this.#dir, `${id}.png`), path.join(this.#dir, `${id}.jpg`), path.join(this.#dir, `${id}.bin`)];
+    for (const file of files) {
       try { fs.unlinkSync(file); } catch { /* already gone */ }
     }
   }
@@ -188,9 +191,15 @@ export class ArtifactStore {
     }
   }
 
+  /** Absolute path of the verified bytes, for hosts that open image files. Never accepts a caller path. */
+  materializedPath(id: string): string {
+    const { descriptor } = this.read(id);
+    return this.#paths(id, descriptor.mediaType).bin;
+  }
+
   clear(): void {
     for (const name of fs.readdirSync(this.#dir)) {
-      const match = /^(art_[0-9a-f]{32})\.(json|bin)$/.exec(name);
+      const match = /^(art_[0-9a-f]{32})\.(json|bin|png|jpg)$/.exec(name);
       if (match) this.remove(match[1]!);
     }
   }

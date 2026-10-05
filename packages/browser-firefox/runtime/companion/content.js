@@ -76,9 +76,16 @@
   const CREDENTIAL_HINT = /\b(otp|totp|hotp|2fa|mfa|cvv|cvc|passcode|one[- ]?time|security code|verification code|recovery code|backup code)\b/i;
   const VALUELESS_INPUT_TYPES = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"]);
 
+  // isContentEditable is the truth in a browser; the attribute is checked too so the rule never depends on it alone.
+  function isEditableHost(element) {
+    if (element.isContentEditable === true) return true;
+    const attribute = element.getAttribute?.("contenteditable");
+    return attribute !== null && attribute !== undefined && /^(|true|plaintext-only)$/i.test(attribute);
+  }
+
   function isFormControl(element) {
     const tag = element.tagName?.toLowerCase();
-    return tag === "input" || tag === "textarea" || tag === "select" || Boolean(element.isContentEditable);
+    return tag === "input" || tag === "textarea" || tag === "select" || isEditableHost(element);
   }
 
   // Credential and one-time-code fields are a human job: the snapshot flags them and writes are refused.
@@ -132,7 +139,7 @@
       name: nameFor(element),
       tag: element.tagName?.toLowerCase() || "",
       type: type || undefined,
-      contenteditable: Boolean(element.isContentEditable),
+      contenteditable: isEditableHost(element),
       connected: element.isConnected,
     };
     if (isCredentialField(element)) summary.credential = true;
@@ -152,6 +159,34 @@
     } catch {
       return false;
     }
+  }
+
+  const TEXT_BLOCK_SELECTOR = "h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,caption,th,td,summary,[role='heading'],[role='alert'],[role='status']";
+  const MAX_TEXT_BLOCKS = 120;
+  const MAX_TEXT_BLOCK_CHARS = 300;
+  const MAX_TEXT_TOTAL_CHARS = 6000;
+
+  // Ordinary visible reading text, bounded and never taken from form controls or hidden content. The page
+  // is untrusted: consumers must treat this as data.
+  function readableText() {
+    const blocks = [];
+    let total = 0;
+    let truncated = false;
+    for (const element of document.querySelectorAll(TEXT_BLOCK_SELECTOR)) {
+      if (!isSnapshotVisible(element)) continue;
+      if (element.closest("script,style,noscript,textarea,select,[contenteditable],[aria-hidden='true']")) continue;
+      // Avoid duplicating a block that only wraps other blocks (e.g. a <li> containing <p>).
+      if (element.querySelector(TEXT_BLOCK_SELECTOR)) continue;
+      const text = clean(element.innerText || element.textContent);
+      if (!text) continue;
+      if (blocks.length >= MAX_TEXT_BLOCKS || total + text.length > MAX_TEXT_TOTAL_CHARS) {
+        truncated = true;
+        break;
+      }
+      blocks.push({ tag: element.tagName.toLowerCase(), text: text.slice(0, MAX_TEXT_BLOCK_CHARS) });
+      total += Math.min(text.length, MAX_TEXT_BLOCK_CHARS);
+    }
+    return { blocks, truncated };
   }
 
   function snapshot() {
@@ -180,6 +215,7 @@
       seen.add(element);
       items.push(elementSummary(element));
     }
+    const text = readableText();
     return {
       document_id: documentId,
       browser_document_id: browserDocumentId,
@@ -187,7 +223,8 @@
       title: document.title,
       frame_url: location.href,
       interaction_generation: interactionGeneration,
-      coverage: { truncated, node_limit: MAX_SNAPSHOT_NODES, values_exported: false, hidden_controls_excluded: true },
+      coverage: { truncated, node_limit: MAX_SNAPSHOT_NODES, values_exported: false, hidden_controls_excluded: true, text_truncated: text.truncated, top_frame_only: true },
+      text_blocks: text.blocks,
       nodes: items,
     };
   }

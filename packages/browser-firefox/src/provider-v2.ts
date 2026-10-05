@@ -241,6 +241,8 @@ interface RawSnapshotCoverage {
   node_limit?: unknown;
   values_exported?: unknown;
   hidden_controls_excluded?: unknown;
+  text_truncated?: unknown;
+  top_frame_only?: unknown;
 }
 
 interface RawSnapshotResult {
@@ -252,6 +254,7 @@ interface RawSnapshotResult {
   url?: unknown;
   title?: unknown;
   coverage?: RawSnapshotCoverage;
+  text_blocks?: unknown;
   nodes?: unknown;
 }
 
@@ -728,7 +731,16 @@ export class FirefoxBrowserProviderV2 implements
               ...(typeof raw.coverage.node_limit === "number" ? { nodeLimit: raw.coverage.node_limit } : {}),
               valuesExported: raw.coverage.values_exported === true,
               hiddenControlsExcluded: raw.coverage.hidden_controls_excluded !== false,
+              ...(raw.coverage.text_truncated === true ? { textTruncated: true } : {}),
+              ...(raw.coverage.top_frame_only === true ? { topFrameOnly: true } : {}),
             },
+          }
+        : {}),
+      ...(Array.isArray(raw.text_blocks)
+        ? {
+            textBlocks: (raw.text_blocks as Array<{ tag?: unknown; text?: unknown }>)
+              .filter((block) => typeof block?.text === "string")
+              .map((block) => ({ tag: typeof block.tag === "string" ? block.tag : "p", text: block.text as string })),
           }
         : {}),
       nodes: mappedNodes,
@@ -1483,6 +1495,17 @@ export class FirefoxBrowserProviderV2 implements
     await this.#requireArtifactAuthority(descriptor, options);
     const { data } = store.read(artifactId);
     return { descriptor, data };
+  }
+
+  /**
+   * Firefox-provider extension (not part of the neutral interface): after re-proving authority and the digest,
+   * return the managed file's path so a host with an image viewer can open it. Paths are never accepted as input.
+   */
+  async materializeArtifact(artifactId: string, options: BrowserOperationOptionsV2 = {}): Promise<{ descriptor: BrowserArtifactDescriptorV1; path: string }> {
+    const store = this.#artifactStore();
+    const descriptor = store.describe(artifactId);
+    await this.#requireArtifactAuthority(descriptor, options);
+    return { descriptor, path: store.materializedPath(artifactId) };
   }
 
   async closeArtifact(artifactId: string): Promise<void> {

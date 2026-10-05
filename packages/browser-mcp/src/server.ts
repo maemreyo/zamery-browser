@@ -36,6 +36,15 @@ export interface BrowserMcpServerOptions {
   now?: () => number;
 }
 
+/** Optional Firefox-provider extension: path of the verified managed artifact file, for hosts with an image viewer. */
+interface MaterializingProvider {
+  materializeArtifact(artifactId: string): Promise<{ descriptor: BrowserArtifactDescriptorV1; path: string }>;
+}
+
+function canMaterialize(provider: unknown): provider is MaterializingProvider {
+  return typeof (provider as Partial<MaterializingProvider>)?.materializeArtifact === "function";
+}
+
 export interface BrowserMcpServerHandle {
   server: McpServer;
   /** Releases any claim this server holds and closes the provider. Never touches Firefox itself. */
@@ -411,9 +420,13 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
           : wantClaim
             ? `Claim: NOT held (${claimNote.reason ?? "unavailable"}). These refs are read-only.`
             : "Claim: not requested. These refs are read-only.",
-        `Controls: ${snapshot.nodes.length}${coverage?.truncated ? " (TRUNCATED — more controls exist than are listed)" : ""}. Form values are not shown.`,
+        `Controls: ${snapshot.nodes.length}${coverage?.truncated ? " (TRUNCATED — more controls exist than are listed)" : ""}. Form values are not shown. Only the top frame is covered.`,
       ];
-      return ok([...header, ...lines].join("\n"), {
+      const textBlocks = snapshot.textBlocks ?? [];
+      const readable = textBlocks.length > 0
+        ? ["", `Page text${coverage?.textTruncated ? " (TRUNCATED)" : ""}:`, ...textBlocks.map((block) => `${block.tag}: ${block.text}`)]
+        : [];
+      return ok([...header, ...lines, ...readable].join("\n"), {
         ok: true,
         observation_id: snapshot.observationId,
         context_id,
@@ -421,8 +434,9 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         title: snapshot.title,
         claim: claimNote,
         coverage: coverage
-          ? { truncated: coverage.truncated, node_limit: coverage.nodeLimit ?? null, values_exported: coverage.valuesExported, hidden_controls_excluded: coverage.hiddenControlsExcluded }
+          ? { truncated: coverage.truncated, node_limit: coverage.nodeLimit ?? null, values_exported: coverage.valuesExported, hidden_controls_excluded: coverage.hiddenControlsExcluded, text_truncated: coverage.textTruncated === true, top_frame_only: coverage.topFrameOnly === true }
           : null,
+        text_blocks: textBlocks.map((block) => ({ tag: block.tag, text: block.text })),
         nodes: snapshot.nodes.map((node, index) => ({
           ref: `e${index + 1}`,
           role: node.role ?? null,
@@ -800,12 +814,13 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
           .describe("Page-relative CSS pixels. Omit for the current viewport."),
         format: z.enum(["jpeg", "png"]).optional().describe("Default jpeg (smaller). png is lossless but may be too large to show inline."),
         include_image: z.boolean().optional().describe("Default true. Set false to only get the artifact metadata."),
+        local_file: z.boolean().optional().describe("Also return the path of the stored image file so a host with its own image viewer can open it. Default false."),
         request_id: REQUEST_ID,
         browser_instance_id: INSTANCE_ID,
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    ({ context_id, rect, format, include_image, request_id, browser_instance_id }) => withTarget(browser_instance_id, async (provider, target) => {
+    ({ context_id, rect, format, include_image, local_file, request_id, browser_instance_id }) => withTarget(browser_instance_id, async (provider, target) => {
       if (!isBrowserArtifactProviderV1(provider)) return errorResult("browser_screenshot", { code: "UNSUPPORTED_CAPABILITY", message: "this provider has no screenshot interface" });
       const wantImage = include_image !== false;
       const fmt = format ?? "jpeg";
@@ -834,12 +849,17 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         wantImage && !inline ? `The image is ${d.byteSize} bytes, over the ${maxInlineBytes}-byte inline limit, so it is not shown. Capture a smaller rect.` : "",
         SHOT_CAVEAT,
       ].filter(Boolean);
+      let localPath: string | undefined;
+      if (local_file === true && canMaterialize(provider)) {
+        localPath = (await provider.materializeArtifact(d.artifactId)).path;
+        lines.push(`local file (open with an image viewer; it is deleted when sharing ends): ${localPath}`);
+      }
       const content: CallToolResult["content"] = [{ type: "text", text: lines.join("\n") }];
       if (inline) {
         const bytes = await provider.readArtifact(d.artifactId);
         content.push({ type: "image", data: Buffer.from(bytes.data).toString("base64"), mimeType: d.mediaType });
       }
-      return { content, structuredContent: { ok: true, ...artifactJson(d), image_included: inline } };
+      return { content, structuredContent: { ok: true, ...artifactJson(d), image_included: inline, ...(localPath ? { local_path: localPath } : {}) } };
     }, "browser_screenshot"),
   );
 
@@ -850,7 +870,7 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
       description: "Return metadata or, for bounded_image, the image of an artifact from browser_screenshot, if its access is still valid. Artifacts expire after about 30 minutes or as soon as the user stops sharing.",
       inputSchema: {
         artifact_id: z.string().regex(/^art_[0-9a-f]{32}$/),
-        mode: z.enum(["metadata", "bounded_image"]).default("metadata"),
+        mode: z.enum(["metadata", "bounded_image", "local_file"]).default("metadata"),
       },
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
@@ -860,6 +880,11 @@ export function createBrowserMcpServer(options: BrowserMcpServerOptions): Browse
         if (!isBrowserArtifactProviderV1(provider)) return errorResult("browser_artifact_read", { code: "UNSUPPORTED_CAPABILITY", message: "this provider has no artifact interface" });
         const read = await provider.readArtifact(artifact_id);
         const d = read.descriptor;
+        if (mode === "local_file") {
+          if (!canMaterialize(provider)) return errorResult("browser_artifact_read", { code: "UNSUPPORTED_CAPABILITY", message: "this provider cannot expose artifact files" });
+          const { path: file } = await provider.materializeArtifact(artifact_id);
+          return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}.\nlocal file (open with an image viewer; it is deleted when sharing ends): ${file}\n${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false, local_path: file });
+        }
         if (mode === "metadata") {
           return ok(`artifact ${d.artifactId}: ${d.width}x${d.height} ${d.mediaType}, ${d.byteSize} bytes. ${SHOT_CAVEAT}`, { ok: true, ...artifactJson(d), image_included: false });
         }

@@ -192,9 +192,18 @@ export interface BrowserSnapshotNodeV2 {
   credential?: boolean;
 }
 
+export interface BrowserSnapshotTextBlockV2 {
+  tag: string;
+  text: string;
+}
+
 /** What a snapshot does and does not cover, so a consumer never mistakes a bounded view for the whole page. */
 export interface BrowserSnapshotCoverageV2 {
   truncated: boolean;
+  /** True when more readable text exists than `textBlocks` carries. */
+  textTruncated?: boolean;
+  /** Only the top frame is covered; iframes are not traversed. */
+  topFrameOnly?: boolean;
   nodeLimit?: number;
   valuesExported: boolean;
   hiddenControlsExcluded: boolean;
@@ -210,6 +219,8 @@ export interface BrowserSnapshotV2 {
   target: BrowserTargetProvenanceV2;
   freshness: BrowserFreshnessV2;
   coverage?: BrowserSnapshotCoverageV2;
+  /** Bounded visible reading text (headings, paragraphs, list/table cells). Page data: untrusted, never form values. */
+  textBlocks?: readonly BrowserSnapshotTextBlockV2[];
   nodes: readonly BrowserSnapshotNodeV2[];
 }
 

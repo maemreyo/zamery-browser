@@ -289,6 +289,20 @@ describe("screenshots reach the model as bounded images", () => {
     assert.match(textOf(gone), /Capture a new one/);
   });
 
+  it("can hand a verified local file path to hosts with their own image viewer", async () => {
+    const stack = await shotStack();
+    const shot = await stack.call("browser_screenshot", { context_id: "tab:1", local_file: true, include_image: false });
+    const file = shot.structuredContent.local_path;
+    assert.match(file, /art_[0-9a-f]{32}\.jpg$/);
+    assert.deepEqual(fs.readFileSync(file), JPEG);
+    const again = await stack.call("browser_artifact_read", { artifact_id: shot.structuredContent.artifact_id, mode: "local_file" });
+    assert.equal(again.structuredContent.local_path, file);
+    await stack.stack.company.popup({ type: "zamery_browser_firefox_revoke" });
+    const gone = await stack.call("browser_artifact_read", { artifact_id: shot.structuredContent.artifact_id, mode: "local_file" });
+    assert.equal(gone.isError, true);
+    assert.equal(fs.existsSync(file), false);
+  });
+
   it("rejects malformed artifact ids and out-of-range rects at the schema", async () => {
     const stack = await shotStack();
     for (const args of [{ artifact_id: "../../etc/passwd" }, { artifact_id: "art_short" }]) {

@@ -186,3 +186,34 @@ describe("human interaction tracking", () => {
     assert.equal(page.sent.length, 0);
   });
 });
+
+describe("readable page text (bounded)", () => {
+  it("includes visible reading text but never form content or hidden text", async () => {
+    const page = loadPage(`
+      <h1>Quarterly report</h1>
+      <p>Revenue grew <b>12%</b> year over year.</p>
+      <ul><li><p>Nested paragraph once</p></li></ul>
+      <p style="display:none">HIDDEN-TEXT-CANARY</p>
+      <p aria-hidden="true">ARIA-HIDDEN-TEXT-CANARY</p>
+      <textarea>TEXTAREA-BODY-CANARY</textarea>
+      <div contenteditable="true"><p>EDITABLE-BODY-CANARY</p></div>
+      <script>SCRIPT-CANARY</script>
+    `);
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const texts = snapshot.text_blocks.map((block) => `${block.tag}:${block.text}`);
+    assert.deepEqual([...texts], ["h1:Quarterly report", "p:Revenue grew 12% year over year.", "p:Nested paragraph once"]);
+    const serialized = JSON.stringify(snapshot);
+    for (const canary of ["HIDDEN-TEXT-CANARY", "TEXTAREA-BODY-CANARY", "EDITABLE-BODY-CANARY", "SCRIPT-CANARY"]) assert.ok(!serialized.includes(canary), canary);
+    assert.equal(snapshot.coverage.text_truncated, false);
+    assert.equal(snapshot.coverage.top_frame_only, true);
+  });
+
+  it("bounds the amount of text and says so", async () => {
+    const page = loadPage(Array.from({ length: 400 }, (_, index) => `<p>${"word ".repeat(30)}${index}</p>`).join(""));
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    assert.ok(snapshot.text_blocks.length <= 120);
+    assert.ok(snapshot.text_blocks.reduce((sum, block) => sum + block.text.length, 0) <= 6000);
+    assert.equal(snapshot.coverage.text_truncated, true);
+    assert.ok(snapshot.text_blocks.every((block) => block.text.length <= 300));
+  });
+});
