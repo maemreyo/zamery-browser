@@ -57,7 +57,9 @@ The tools use BrowserProvider V1 semantics today. BrowserProvider V2 is availabl
 codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@<tested-version>
 ```
 
-Not available until a preview release candidate is published; see [technical preview status](technical-preview.md). In Firefox you then share tabs from the Zamery Browser panel; the agent cannot do that for itself.
+Install the bundled Codex recipe as well: merge [`../packages/browser-mcp/codex/AGENTS.snippet.md`](../packages/browser-mcp/codex/AGENTS.snippet.md) into your project's `AGENTS.md`, or install [`../packages/browser-mcp/codex/skill/zamery-browser`](../packages/browser-mcp/codex/skill/zamery-browser/SKILL.md) as a Codex skill. The tested bridge does not reliably forward inline MCP images, so the recipe tells Codex to open the local screenshot file with its image viewer before describing pixels.
+
+Not available until a preview release candidate is published; see [technical preview status](technical-preview.md). In Firefox you then share tabs from the Zamery Browser panel; the agent cannot do that for itself. Clean-machine acceptance must include the recipe when validating screenshot/model-vision behavior.
 
 Pi note: each Pi process appears as its own "Local agent" in the panel (its `clientId` is the audience), so a grant covers that process's session.
 
