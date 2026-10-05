@@ -25,7 +25,7 @@ export async function connectStack(stackOptions = {}) {
   const sessionsDir = path.join(stack.roots.runtimeDir, "sessions");
   const mcp = await connect({
     requestIdFactory: () => createFirefoxRequestId(),
-    provider: ({ clientName }) => createFirefoxBrowserProviderV2({ sessionsDir, audienceId: AUD, clientLabel: `MCP: ${clientName ?? "?"}` }),
+    provider: ({ clientName }) => createFirefoxBrowserProviderV2({ sessionsDir, audienceId: AUD, autoClaim: false, clientLabel: `MCP: ${clientName ?? "?"}` }),
   });
   return {
     ...mcp,

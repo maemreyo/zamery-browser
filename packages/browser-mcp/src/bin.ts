@@ -38,6 +38,8 @@ function main(): void {
     requestIdFactory: () => createFirefoxRequestId(),
     provider: ({ clientName }) => createFirefoxBrowserProviderV2({
       audienceId: consumerId,
+      // The MCP server manages the claim explicitly (browser_snapshot claim=true/false), so a snapshot must not claim.
+      autoClaim: false,
       clientLabel: clientName ? `MCP: ${clientName}` : "MCP client",
       ...(browserInstanceId ? { browserInstanceId } : {}),
       ...(sessionsDir ? { sessionsDir } : {}),

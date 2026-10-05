@@ -223,6 +223,12 @@ export interface FirefoxBrowserProviderOptions {
   /** Managed screenshot artifact root. Defaults to ~/Library/Application Support/Zamery/browser-firefox/artifacts/screenshots. */
   artifactRoot?: string;
   artifactLifetimeMs?: number;
+  /**
+   * V1 and plain V2 consumers have no claim concept, so by default a snapshot also takes the write claim for that
+   * tab (the previous "snapshot, then act" flow keeps working). Consumers that manage claims explicitly through
+   * BrowserControlProviderV1 (such as @zamery/browser-mcp) set this to false: a snapshot is then read-only.
+   */
+  autoClaim?: boolean;
   /** Informational label shown to the user when they choose which local agent to share with. Never authority. */
   clientLabel?: string;
 }
@@ -377,6 +383,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
   readonly #sessionsDir: string | undefined;
   readonly #audienceId: string;
   readonly #clientLabel: string | undefined;
+  readonly #autoClaim: boolean;
   readonly #assetTransfers = new Map<string, AssetTransferTracker>();
 
   constructor(options: FirefoxBrowserProviderOptions = {}) {
@@ -385,6 +392,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
     this.#sessionsDir = options.sessionsDir;
     this.#audienceId = normalizeAudienceId(options.audienceId || options.clientId);
     this.#clientLabel = options.clientLabel;
+    this.#autoClaim = options.autoClaim !== false;
   }
 
   async capabilities() {
@@ -777,7 +785,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
     const response = await sendFirefoxBrokerRequest(
       session,
       "snapshot",
-      { context_id: request.contextId },
+      { context_id: request.contextId, ...(this.#autoClaim ? { claim: true } : {}) },
       brokerOptions(options, this.#audienceId),
     );
     const raw = assertOk(response) as RawSnapshotResult;

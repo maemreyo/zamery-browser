@@ -262,7 +262,7 @@ describe("screenshots reach the model as bounded images", () => {
       const mcp = await connect({
         maxInlineImageBytes: 100,
         requestIdFactory: () => createFirefoxRequestId(),
-        provider: () => createFirefoxBrowserProviderV2({ sessionsDir: path.join(s.roots.runtimeDir, "sessions"), audienceId: "mcp-test-consumer-0001", artifactRoot: path.join(s.roots.root, "art") }),
+        provider: () => createFirefoxBrowserProviderV2({ sessionsDir: path.join(s.roots.runtimeDir, "sessions"), audienceId: "mcp-test-consumer-0001", autoClaim: false, artifactRoot: path.join(s.roots.root, "art") }),
       });
       await mcp.call("browser_status");
       await s.company.popup({ type: "zamery_browser_firefox_grant", audience_id: "mcp-test-consumer-0001", tab_ids: [1], duration: { mode: "session" } });

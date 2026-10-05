@@ -11,6 +11,7 @@ import { createFirefoxBrowserProviderV2, createFirefoxRequestId, runFirefoxDocto
 
 import { createBrowserMcpServer } from "../dist/index.js";
 import { AUDIENCE, startLive } from "../../browser-firefox/live/live-env.mjs";
+import { connectMarionette } from "../../browser-firefox/live/marionette.mjs";
 import { decodePng, near } from "./png-decode.mjs";
 
 let live;
@@ -35,7 +36,7 @@ async function connectMcp() {
   mcp = createBrowserMcpServer({
     version: "live",
     requestIdFactory: () => createFirefoxRequestId(),
-    provider: () => createFirefoxBrowserProviderV2({ sessionsDir: live.sessionsDir, audienceId: AUDIENCE, clientLabel: "live-acceptance", artifactRoot: path.join(live.dirs.root, "artifacts") }),
+    provider: () => createFirefoxBrowserProviderV2({ sessionsDir: live.sessionsDir, audienceId: AUDIENCE, autoClaim: false, clientLabel: "live-acceptance", artifactRoot: path.join(live.dirs.root, "artifacts") }),
   });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await mcp.server.connect(serverTransport);
@@ -478,5 +479,44 @@ describe("live Firefox: private windows, restart and rebind", () => {
       assert.equal(rebound.ok, true, JSON.stringify(rebound));
       assert.equal(rebound.expires_at, before);
     }
+  });
+});
+
+describe("live Firefox: trusted human gestures (Marionette-synthesized input)", () => {
+  let marionette;
+  after(() => marionette?.close());
+
+  it("a trusted keystroke on the claimed tab takes control immediately, and the agent's observation dies", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    const snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    assert.equal(snap.structuredContent.claim.claimed, true);
+    const field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    // Agent-origin events are untrusted and never trigger takeover (checked in the DOM-act test); a human key is trusted.
+    marionette = await connectMarionette();
+    await marionette.switchToUrl("/form");
+    await marionette.type("#name", "typed by a human");
+    await sleep(800);
+    const control = (await call("browser_status")).structuredContent.authorization.control;
+    assert.equal(control.state, "user_control");
+    assert.equal(control.reason, "human_interaction");
+    const blocked = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "agent overwrite" });
+    assert.equal(blocked.isError, true);
+    assert.equal(blocked.structuredContent.outcome, "not_started");
+    assert.equal(await pageValue(tab.id, "document.getElementById('name').value"), "PREFILLED-NAME-CANARYtyped by a human", "the human's text was not overwritten");
+    note("trusted-human-input", { source: "Marionette element send keys (isTrusted=true)", control: control.reason, agentWriteBlocked: true, humanTextPreserved: true });
+  });
+
+  it("a trusted click takes control too", async () => {
+    await live.user("resume");
+    const tabs = (await live.user("tabs")).tabs;
+    const tab = tabs.find((t) => t.url.endsWith("/form"));
+    await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    await marionette.click("#save");
+    await sleep(800);
+    assert.equal((await call("browser_status")).structuredContent.authorization.control.state, "user_control");
+    note("trusted-human-click", { control: "user_control" });
   });
 });

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 
-import { createFirefoxBrowserProviderV2, createFirefoxRequestId } from "../dist/index.js";
+import { createFirefoxBrowserProvider, createFirefoxBrowserProviderV2, createFirefoxRequestId } from "../dist/index.js";
 import { startStack } from "./helpers/stack-harness.mjs";
 import { settle } from "./helpers/companion-harness.mjs";
 
@@ -158,5 +158,33 @@ describe("BrowserProvider V2 over the real broker, host and companion", () => {
     const result = await provider.createTab({ requestId: createFirefoxRequestId(), browserInstanceId: "none", url: "https://a.test/" });
     assert.equal(result.outcome, "not_started");
     assert.equal(result.error.code, "HOST_MISSING");
+  });
+});
+
+describe("consumers without a claim concept keep the snapshot-then-act flow", () => {
+  it("V1 provider: snapshot claims implicitly, so the old click flow still works", async () => {
+    const { stack } = await boot();
+    await grant(stack);
+    const sessionsDir = path.join(stack.roots.runtimeDir, "sessions");
+    const v1 = createFirefoxBrowserProvider({ sessionsDir, audienceId: AUD });
+    const [instance] = await v1.listInstances();
+    const snapshot = await v1.snapshot({ browserInstanceId: instance.browserInstanceId, contextId: "tab:1" });
+    const result = await v1.act({
+      requestId: createFirefoxRequestId(), browserInstanceId: instance.browserInstanceId, contextId: "tab:1",
+      action: { capability: "action.click.dom-synthetic", ref: snapshot.nodes[0].ref },
+    });
+    assert.equal(result.outcome, "completed", JSON.stringify(result));
+  });
+
+  it("V2 provider with autoClaim=false leaves the snapshot read-only: acting needs an explicit claim", async () => {
+    const { stack, target } = await boot();
+    await grant(stack);
+    const sessionsDir = path.join(stack.roots.runtimeDir, "sessions");
+    const explicit = createFirefoxBrowserProviderV2({ sessionsDir, audienceId: AUD, autoClaim: false });
+    const snapshot = await explicit.snapshot({ ...target, contextId: "tab:1" });
+    const request = (ref) => ({ requestId: createFirefoxRequestId(), ...target, contextId: "tab:1", action: { capability: "action.click", ref, observationId: snapshot.observationId } });
+    const unclaimed = await explicit.act(request(snapshot.nodes[0].ref));
+    assert.equal(unclaimed.outcome, "not_started");
+    assert.equal(unclaimed.error.reason, "claim_required");
   });
 });

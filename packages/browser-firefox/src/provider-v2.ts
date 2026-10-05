@@ -555,6 +555,7 @@ export class FirefoxBrowserProviderV2 implements
   readonly #sessionsDir: string | undefined;
   readonly #audienceId: string;
   readonly #clientLabel: string | undefined;
+  readonly #autoClaim: boolean;
   readonly #artifactOptions: { root?: string; lifetimeMs?: number };
   #artifacts: ArtifactStore | undefined;
   readonly #trackedRefs = new Map<string, TrackedRef>();
@@ -565,6 +566,7 @@ export class FirefoxBrowserProviderV2 implements
     this.#sessionsDir = options.sessionsDir;
     this.#audienceId = normalizeAudienceId(options.audienceId || options.clientId);
     this.#clientLabel = options.clientLabel;
+    this.#autoClaim = options.autoClaim !== false;
     this.#artifactOptions = {
       ...(options.artifactRoot !== undefined ? { root: options.artifactRoot } : {}),
       ...(options.artifactLifetimeMs !== undefined ? { lifetimeMs: options.artifactLifetimeMs } : {}),
@@ -684,7 +686,7 @@ export class FirefoxBrowserProviderV2 implements
     const response = await sendFirefoxBrokerRequest(
       session,
       "snapshot",
-      { context_id: request.contextId },
+      { context_id: request.contextId, ...(this.#autoClaim ? { claim: true } : {}) },
       { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
     );
     const raw = assertOk(response) as RawSnapshotResult;

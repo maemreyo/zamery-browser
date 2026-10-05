@@ -46,7 +46,7 @@ export async function startLive(options = {}) {
       "--firefox", FIREFOX,
       "--firefox-profile", dirs.profile,
       "--keep-profile-changes", "--no-reload", "--no-input",
-      "--arg=-no-remote", ...(process.env.LIVE_HEADED === "1" ? [] : ["--arg=-headless"]),
+      "--arg=-no-remote", ...(process.env.LIVE_HEADED === "1" ? [] : ["--arg=-headless"]), "--arg=-marionette",
       "--start-url", `http://127.0.0.1:${fixtures.port}/`,
     ], { cwd: root, env, stdio: ["ignore", log, log], detached: true });
     firefox.unref();
