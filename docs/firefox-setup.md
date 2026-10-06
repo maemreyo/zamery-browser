@@ -5,7 +5,7 @@
 1. the **Zamery Browser Companion** WebExtension (Mozilla-signed);
 2. a local Native Messaging host installed by `@zamery/browser-firefox`.
 
-> **Technical preview status.** The protocol-2 companion (scoped consent, tab groups, screenshots) is not yet published as a signed XPI. The steps below describe the intended flow; the release notes of a preview candidate list the exact signed XPI version and SHA-256 that match a given npm package set. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
+> **Technical preview status.** The protocol-2 companion candidate `0.2.1` is Mozilla-signed, but the preview remains NO-GO until clean-machine and real authenticated-profile acceptance pass. Use only the exact signed XPI and SHA-256 recorded in the release evidence. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
 
 ## 1. Install the native host
 
