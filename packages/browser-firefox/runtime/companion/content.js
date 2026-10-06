@@ -22,6 +22,25 @@
   const nodeIds = new WeakMap();
   const nodes = new Map();
   let nextNodeId = 1;
+  const MAX_SNAPSHOT_NODES = 250;
+  const MAX_LABEL_CHARS = 600;
+  // Counts trusted human gestures only. Synthetic events (ours or the page's) never bump it.
+  let interactionGeneration = 0;
+  let armed = false;
+
+  function onHumanInteraction(event) {
+    if (!event.isTrusted) return;
+    interactionGeneration += 1;
+    if (armed) {
+      armed = false;
+      try {
+        void browser.runtime.sendMessage({ type: "zamery_browser_firefox_interaction" }).catch(() => undefined);
+      } catch {}
+    }
+  }
+  for (const type of ["pointerdown", "keydown", "beforeinput", "input", "change", "paste", "drop"]) {
+    window.addEventListener(type, onHumanInteraction, { capture: true, passive: true });
+  }
 
   function nodeIdFor(element) {
     let id = nodeIds.get(element);
@@ -54,19 +73,143 @@
     return tag || "element";
   }
 
+  const CREDENTIAL_AUTOCOMPLETE = /\b(one-time-code|current-password|new-password|cc-number|cc-csc|cc-exp|cc-exp-month|cc-exp-year|cc-name)\b/i;
+  const CREDENTIAL_HINT = /\b(otp|totp|hotp|2fa|mfa|cvv|cvc|cvn|passcode|one[- ]?time|security code|verification code|recovery code|backup code|card ?(number|num|no)|cardnum|credit ?card|debit ?card|cc ?(num|number|no)|ccnum|iban|swift|routing ?number|account ?number|ssn|social security|tax ?id|passport|pin ?code|secret ?(key|answer))\b/i;
+  const VALUELESS_INPUT_TYPES = new Set(["checkbox", "radio", "button", "submit", "reset", "image", "file", "color", "range"]);
+
+  // isContentEditable is the truth in a browser; the attribute is checked too so the rule never depends on it alone.
+  function isEditableHost(element) {
+    if (element.isContentEditable === true) return true;
+    const attribute = element.getAttribute?.("contenteditable");
+    return attribute !== null && attribute !== undefined && /^(|true|plaintext-only)$/i.test(attribute);
+  }
+
+  function isFormControl(element) {
+    const tag = element.tagName?.toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select" || isEditableHost(element);
+  }
+
+  // Credential and one-time-code fields are a human job: the snapshot flags them and writes are refused.
+  function isCredentialField(element) {
+    const tag = element.tagName?.toLowerCase();
+    if (tag !== "input" && tag !== "textarea") return false;
+    const type = (element.getAttribute("type") || "text").toLowerCase();
+    if (type === "password") return true;
+    if (CREDENTIAL_AUTOCOMPLETE.test(element.getAttribute("autocomplete") || "")) return true;
+    const hint = [element.getAttribute("name"), element.id, element.getAttribute("aria-label"), element.getAttribute("placeholder")]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/[_.\-]+/g, " ");
+    return CREDENTIAL_HINT.test(hint);
+  }
+
+  function labelTextFor(element) {
+    const parts = [];
+    const labelledBy = element.getAttribute?.("aria-labelledby");
+    if (labelledBy) {
+      for (const id of labelledBy.split(/\s+/)) {
+        const target = id ? document.getElementById(id) : null;
+        if (target && !isFormControl(target)) parts.push(target.textContent);
+      }
+    }
+    if (parts.length === 0 && element.labels) {
+      for (const label of element.labels) parts.push(label.textContent);
+    }
+    return clean(parts.join(" "));
+  }
+
+  // Names describe a control; they must never carry what the user typed into it. Form controls therefore
+  // never contribute innerText/textContent (textarea/contenteditable/select content is user data).
+  function nameFor(element) {
+    const explicit = clean(element.getAttribute?.("aria-label"));
+    if (explicit) return explicit;
+    if (isFormControl(element)) {
+      const tag = element.tagName?.toLowerCase();
+      const type = (element.getAttribute("type") || "").toLowerCase();
+      if (tag === "input" && ["button", "submit", "reset"].includes(type)) return clean(element.getAttribute("value") || labelTextFor(element));
+      return labelTextFor(element) || clean(element.getAttribute("placeholder") || element.getAttribute("title") || "");
+    }
+    return clean(readableLabel(element) || element.getAttribute?.("title") || "");
+  }
+
+  // Text of an ordinary element, skipping any form control or editable subtree inside it, so a wrapper that
+  // matched the snapshot selector can never leak what the user typed into a nested field.
+  function readableLabel(element) {
+    const parts = [];
+    let length = 0;
+    const walk = (node) => {
+      if (length >= MAX_LABEL_CHARS) return;
+      if (node.nodeType === 3) {
+        parts.push(node.nodeValue);
+        length += node.nodeValue.length;
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === "script" || tag === "style" || tag === "noscript" || tag === "input" || tag === "textarea" || tag === "select") return;
+      if (isEditableHost(node)) return;
+      for (const child of node.childNodes) walk(child);
+    };
+    walk(element);
+    return parts.join(" ");
+  }
+
   function elementSummary(element) {
     const type = (element.getAttribute?.("type") || "").toLowerCase();
-    const sensitive = type === "password";
-    return {
+    const summary = {
       node_id: nodeIdFor(element),
       role: roleFor(element),
-      name: clean(element.getAttribute?.("aria-label") || element.innerText || element.textContent || element.getAttribute?.("placeholder")),
+      name: nameFor(element),
       tag: element.tagName?.toLowerCase() || "",
       type: type || undefined,
-      value: sensitive ? undefined : ("value" in element ? clean(element.value) : undefined),
-      contenteditable: Boolean(element.isContentEditable),
+      contenteditable: isEditableHost(element),
       connected: element.isConnected,
     };
+    if (isCredentialField(element)) summary.credential = true;
+    if (element instanceof HTMLInputElement && (type === "checkbox" || type === "radio") && !summary.credential) summary.checked = element.checked;
+    if (element.disabled === true) summary.disabled = true;
+    return summary;
+  }
+
+  function isSnapshotVisible(element) {
+    if (!(element instanceof Element)) return false;
+    if (element instanceof HTMLInputElement && (element.type || "").toLowerCase() === "hidden") return false;
+    if (element.getAttribute?.("aria-hidden") === "true") return false;
+    try {
+      const style = getComputedStyle(element);
+      if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+      return element.getClientRects().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  const TEXT_BLOCK_SELECTOR = "h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,caption,th,td,summary,[role='heading'],[role='alert'],[role='status']";
+  const MAX_TEXT_BLOCKS = 120;
+  const MAX_TEXT_BLOCK_CHARS = 300;
+  const MAX_TEXT_TOTAL_CHARS = 6000;
+
+  // Ordinary visible reading text, bounded and never taken from form controls or hidden content. The page
+  // is untrusted: consumers must treat this as data.
+  function readableText() {
+    const blocks = [];
+    let total = 0;
+    let truncated = false;
+    for (const element of document.querySelectorAll(TEXT_BLOCK_SELECTOR)) {
+      if (!isSnapshotVisible(element)) continue;
+      if (element.closest("script,style,noscript,textarea,select,[contenteditable],[aria-hidden='true']")) continue;
+      // Avoid duplicating a block that only wraps other blocks (e.g. a <li> containing <p>).
+      if (element.querySelector(TEXT_BLOCK_SELECTOR)) continue;
+      const text = clean(readableLabel(element));
+      if (!text) continue;
+      if (blocks.length >= MAX_TEXT_BLOCKS || total + text.length > MAX_TEXT_TOTAL_CHARS) {
+        truncated = true;
+        break;
+      }
+      blocks.push({ tag: element.tagName.toLowerCase(), text: text.slice(0, MAX_TEXT_BLOCK_CHARS) });
+      total += Math.min(text.length, MAX_TEXT_BLOCK_CHARS);
+    }
+    return { blocks, truncated };
   }
 
   function snapshot() {
@@ -84,18 +227,27 @@
     ].join(",");
     const seen = new Set();
     const items = [];
+    let truncated = false;
     for (const element of document.querySelectorAll(selector)) {
       if (!(element instanceof Element) || seen.has(element)) continue;
+      if (!isSnapshotVisible(element)) continue;
+      if (items.length >= MAX_SNAPSHOT_NODES) {
+        truncated = true;
+        break;
+      }
       seen.add(element);
       items.push(elementSummary(element));
-      if (items.length >= 250) break;
     }
+    const text = readableText();
     return {
       document_id: documentId,
       browser_document_id: browserDocumentId,
       url: location.href,
       title: document.title,
       frame_url: location.href,
+      interaction_generation: interactionGeneration,
+      coverage: { truncated, node_limit: MAX_SNAPSHOT_NODES, values_exported: false, hidden_controls_excluded: true, text_truncated: text.truncated, top_frame_only: true },
+      text_blocks: text.blocks,
       nodes: items,
     };
   }
@@ -139,6 +291,9 @@
     const resolved = resolveNode(request);
     if (resolved.error) return resolved;
     const element = resolved.element;
+    if (["fill", "type", "key"].includes(request.action) && isCredentialField(element)) {
+      return { error: { code: "USER_TAKEOVER_REQUIRED", reason: "credential_field" } };
+    }
     const beforeActivation = Boolean(navigator.userActivation?.isActive);
     const delayAfterMs = location.hostname === "127.0.0.1"
       ? Math.max(0, Math.min(15_000, Number(request.v0c_test_delay_after_ms || 0)))
@@ -182,7 +337,8 @@
         const end = element.selectionEnd ?? element.value.length;
         const value = element.value.slice(0, start) + text + element.value.slice(end);
         setNativeValue(element, value);
-        element.setSelectionRange?.(start + text.length, start + text.length);
+        // setSelectionRange throws on input types without a caret (email, number); the text is already set.
+        try { element.setSelectionRange?.(start + text.length, start + text.length); } catch { /* not selectable */ }
         dispatchInputEvents(element);
       } else if (element.isContentEditable) {
         return {
@@ -290,7 +446,14 @@
 
   browser.runtime.onMessage.addListener((message) => {
     if (!message || typeof message !== "object") return undefined;
-    if (message.type === "zamery_browser_firefox_snapshot" || message.type === "zamery_v0c_snapshot") return Promise.resolve(snapshot());
+    if (message.type === "zamery_browser_firefox_arm") {
+      armed = true;
+      return undefined;
+    }
+    if (message.type === "zamery_browser_firefox_snapshot" || message.type === "zamery_v0c_snapshot") {
+      if (message.arm === true) armed = true;
+      return Promise.resolve(snapshot());
+    }
     if (message.type === "zamery_browser_firefox_act" || message.type === "zamery_v0c_act") return Promise.resolve(act(message));
     if (message.type === "zamery_browser_firefox_asset_discover_v1") {
       return discoveryCall(() => assetDiscoveryRuntime.discoverAssets());
@@ -344,13 +507,18 @@
       return assetCall(() => assetRuntime.cancelRequest(message.request_id));
     }
     if (message.type === "zamery_browser_firefox_ping" || message.type === "zamery_v0c_ping") {
+      if (message.arm === true) armed = true;
       return Promise.resolve({
+        interaction_generation: interactionGeneration,
         document_id: documentId,
         browser_document_id: browserDocumentId,
         url: location.href,
         title: document.title,
         viewport_width: window.innerWidth,
         viewport_height: window.innerHeight,
+        scroll_x: window.scrollX,
+        scroll_y: window.scrollY,
+        device_pixel_ratio: window.devicePixelRatio,
         navigator_webdriver: navigator.webdriver,
         asset_discovery_v1_ready: Boolean(assetDiscoveryRuntime),
         asset_transfer_v1_ready: Boolean(assetTransferRuntime),

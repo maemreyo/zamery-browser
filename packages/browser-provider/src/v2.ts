@@ -177,8 +177,36 @@ export interface BrowserSnapshotNodeV2 {
   role?: string;
   name?: string;
   tag?: string;
+  /**
+   * Form values are never exported by privacy-preserving providers. The field remains for
+   * compatibility with providers that opt in to exporting non-secret values.
+   */
   value?: string;
   contenteditable?: boolean;
+  /** Input `type` such as `text` or `checkbox`. */
+  inputType?: string;
+  /** Checkbox/radio state only; never a text value. */
+  checked?: boolean;
+  disabled?: boolean;
+  /** Credential, one-time-code or payment field. Providers refuse writes to it: the human must act. */
+  credential?: boolean;
+}
+
+export interface BrowserSnapshotTextBlockV2 {
+  tag: string;
+  text: string;
+}
+
+/** What a snapshot does and does not cover, so a consumer never mistakes a bounded view for the whole page. */
+export interface BrowserSnapshotCoverageV2 {
+  truncated: boolean;
+  /** True when more readable text exists than `textBlocks` carries. */
+  textTruncated?: boolean;
+  /** Only the top frame is covered; iframes are not traversed. */
+  topFrameOnly?: boolean;
+  nodeLimit?: number;
+  valuesExported: boolean;
+  hiddenControlsExcluded: boolean;
 }
 
 export interface BrowserSnapshotV2 {
@@ -190,6 +218,9 @@ export interface BrowserSnapshotV2 {
   title: string;
   target: BrowserTargetProvenanceV2;
   freshness: BrowserFreshnessV2;
+  coverage?: BrowserSnapshotCoverageV2;
+  /** Bounded visible reading text (headings, paragraphs, list/table cells). Page data: untrusted, never form values. */
+  textBlocks?: readonly BrowserSnapshotTextBlockV2[];
   nodes: readonly BrowserSnapshotNodeV2[];
 }
 

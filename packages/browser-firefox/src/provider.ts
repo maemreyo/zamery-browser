@@ -1,4 +1,4 @@
-import { createHash, type Hash } from "node:crypto";
+import { createHash, randomUUID, type Hash } from "node:crypto";
 
 import {
   BROWSER_ASSET_PROVIDER_V1,
@@ -31,7 +31,8 @@ import {
   type BrowserSnapshot,
 } from "@zamery/browser-provider";
 
-import { sendFirefoxBrokerRequest } from "./client.js";
+import { normalizeAudienceId } from "./audience.js";
+import { isFirefoxBrokerTransportError, sendFirefoxBrokerRequest } from "./client.js";
 import { listLiveFirefoxSessions, selectFirefoxSession } from "./session.js";
 import type { FirefoxBrokerResponse, FirefoxSessionReceipt } from "./protocol.js";
 
@@ -212,6 +213,26 @@ export interface FirefoxBrowserProviderOptions {
   browserInstanceId?: string;
   sessionMaxAgeMs?: number;
   sessionsDir?: string;
+  /**
+   * Stable identity of this consumer. A grant is bound to it, so a consumer that wants its grant to survive
+   * its own restart must persist and reuse the id. Defaults to a fresh random id per provider instance.
+   */
+  audienceId?: string;
+  /** Used as the audience when no `audienceId` is given (for example Pi's per-process `clientId`). */
+  clientId?: string;
+  /** Managed screenshot artifact root. Defaults to ~/Library/Application Support/Zamery/browser-firefox/artifacts/screenshots. */
+  artifactRoot?: string;
+  artifactLifetimeMs?: number;
+  /** How often leftover artifacts are checked against the live access binding (default 15 s). */
+  artifactReaperIntervalMs?: number;
+  /**
+   * V1 and plain V2 consumers have no claim concept, so by default a snapshot also takes the write claim for that
+   * tab (the previous "snapshot, then act" flow keeps working). Consumers that manage claims explicitly through
+   * BrowserControlProviderV1 (such as @zamery/browser-mcp) set this to false: a snapshot is then read-only.
+   */
+  autoClaim?: boolean;
+  /** Informational label shown to the user when they choose which local agent to share with. Never authority. */
+  clientLabel?: string;
 }
 
 function stringOrEmpty(value: unknown): string {
@@ -305,8 +326,9 @@ function assertOk(response: FirefoxBrokerResponse): unknown {
   return response.result;
 }
 
-function brokerOptions(options: BrowserOperationOptions, id?: string): { id?: string; signal?: AbortSignal } {
+function brokerOptions(options: BrowserOperationOptions, audienceId: string, id?: string): { id?: string; signal?: AbortSignal; audienceId: string } {
   return {
+    audienceId,
     ...(id === undefined ? {} : { id }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   };
@@ -361,12 +383,18 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
   readonly #browserInstanceId: string | undefined;
   readonly #sessionMaxAgeMs: number | undefined;
   readonly #sessionsDir: string | undefined;
+  readonly #audienceId: string;
+  readonly #clientLabel: string | undefined;
+  readonly #autoClaim: boolean;
   readonly #assetTransfers = new Map<string, AssetTransferTracker>();
 
   constructor(options: FirefoxBrowserProviderOptions = {}) {
     this.#browserInstanceId = options.browserInstanceId;
     this.#sessionMaxAgeMs = options.sessionMaxAgeMs;
     this.#sessionsDir = options.sessionsDir;
+    this.#audienceId = normalizeAudienceId(options.audienceId || options.clientId);
+    this.#clientLabel = options.clientLabel;
+    this.#autoClaim = options.autoClaim !== false;
   }
 
   async capabilities() {
@@ -418,7 +446,12 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
 
   async status(options: BrowserOperationOptions = {}): Promise<BrowserProviderStatus> {
     const session = this.#sessionFor();
-    const response = await sendFirefoxBrokerRequest(session, "status", {}, brokerOptions(options));
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "status",
+      this.#clientLabel ? { client_label: this.#clientLabel } : {},
+      { ...brokerOptions(options, this.#audienceId), readRetry: { attempts: 3, backoffMs: 150 } },
+    );
     const raw = assertOk(response) as RawStatus;
     const auth = raw.authorization ?? {};
     return {
@@ -449,7 +482,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
     options: BrowserOperationOptions = {},
   ): Promise<readonly BrowserContextSummary[]> {
     const session = this.#sessionFor(request.browserInstanceId);
-    const response = await sendFirefoxBrokerRequest(session, "list_contexts", {}, brokerOptions(options));
+    const response = await sendFirefoxBrokerRequest(session, "list_contexts", {}, brokerOptions(options, this.#audienceId));
     const raw = assertOk(response) as RawContextsResult;
     const browserInstanceId = stringOrEmpty(raw.browser_instance_id) || request.browserInstanceId;
     const contexts = Array.isArray(raw.contexts) ? raw.contexts as RawContext[] : [];
@@ -465,7 +498,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
       session,
       "asset_capabilities_v1",
       { context_id: request.contextId },
-      brokerOptions(options),
+      brokerOptions(options, this.#audienceId),
     );
     const raw = assertAssetOk(response) as RawAssetCapabilitiesResult;
     return {
@@ -489,7 +522,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
         context_id: request.contextId,
         ...(request.limit === undefined ? {} : { limit: request.limit }),
       },
-      brokerOptions(options),
+      brokerOptions(options, this.#audienceId),
     );
     const raw = assertAssetOk(response) as RawAssetDiscoveryResult;
     const browserInstanceId = stringOrEmpty(raw.browser_instance_id) || request.browserInstanceId;
@@ -548,7 +581,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
         asset_ref: request.assetRef,
         max_bytes: request.maxBytes,
       },
-      brokerOptions(options),
+      brokerOptions(options, this.#audienceId),
     );
     const raw = assertAssetOk(response) as RawAssetOpenResult;
     const transferId = stringOrEmpty(raw.transfer_id);
@@ -570,7 +603,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
             session,
             "asset_close_v1",
             { asset_handle: assetHandle, reason: "consumer_error" },
-            brokerOptions(options),
+            brokerOptions(options, this.#audienceId),
           );
         } catch {
           // Best-effort cleanup when the open handshake itself is malformed.
@@ -638,7 +671,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
         offset: request.offset,
         max_raw_bytes: request.maxRawBytes,
       },
-      brokerOptions(options),
+      brokerOptions(options, this.#audienceId),
     );
     const raw = assertAssetOk(response) as RawAssetChunkResult;
     const transferId = stringOrEmpty(raw.transfer_id);
@@ -736,7 +769,7 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
           asset_handle: request.assetHandle,
           ...(request.reason === undefined ? {} : { reason: request.reason }),
         },
-        brokerOptions(options),
+        brokerOptions(options, this.#audienceId),
       );
       const raw = assertAssetOk(response) as { closed?: unknown };
       if (raw.closed !== true) throw assetProtocolError("close_not_acknowledged");
@@ -754,8 +787,8 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
     const response = await sendFirefoxBrokerRequest(
       session,
       "snapshot",
-      { context_id: request.contextId },
-      brokerOptions(options),
+      { context_id: request.contextId, ...(this.#autoClaim ? { claim: true } : {}) },
+      brokerOptions(options, this.#audienceId),
     );
     const raw = assertOk(response) as RawSnapshotResult;
     const nodes = Array.isArray(raw.nodes) ? raw.nodes as RawSnapshotNode[] : [];
@@ -782,12 +815,21 @@ export class FirefoxBrowserProvider implements BrowserProvider, BrowserAssetProv
     options: BrowserOperationOptions = {},
   ): Promise<BrowserMutationResult> {
     const session = this.#sessionFor(request.browserInstanceId);
-    const response = await sendFirefoxBrokerRequest(
-      session,
-      "act",
-      { context_id: request.contextId, ...actionParams(request.action) },
-      brokerOptions(options, request.requestId),
-    );
+    let response: FirefoxBrokerResponse;
+    try {
+      response = await sendFirefoxBrokerRequest(
+        session,
+        "act",
+        { context_id: request.contextId, ...actionParams(request.action) },
+        brokerOptions(options, this.#audienceId, request.requestId),
+      );
+    } catch (error) {
+      if (!isFirefoxBrokerTransportError(error)) throw error;
+      // Never turn a lost response into a thrown, retryable-looking error: the action may have run.
+      return error.phase === "not_dispatched"
+        ? { outcome: "not_started", error: { code: "BROWSER_PROVIDER_ERROR", message: error.message, reason: "transport_not_dispatched" }, replayed: false }
+        : { outcome: "outcome_unknown", error: { code: "MUTATION_OUTCOME_UNKNOWN", message: error.message, reason: "transport_dispatch_unknown" }, replayed: false };
+    }
     if (!response.ok) {
       const outcome = response.outcome ?? "not_started";
       const error = errorFromResponse(response);

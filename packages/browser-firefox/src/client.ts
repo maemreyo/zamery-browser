@@ -13,6 +13,35 @@ export interface SendFirefoxBrokerRequestOptions {
   id?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  audienceId?: string;
+  /**
+   * Bounded retry for idempotent reads only. Never set this for a mutation: a lost response after
+   * dispatch must be reconciled through mutation status, not blindly re-sent.
+   */
+  readRetry?: { attempts: number; backoffMs: number };
+}
+
+/** Where a transport failure happened relative to the request reaching the broker. */
+export type FirefoxBrokerTransportPhase = "not_dispatched" | "dispatch_unknown";
+
+export class FirefoxBrokerTransportError extends Error {
+  readonly phase: FirefoxBrokerTransportPhase;
+  readonly transportCode: "CONNECT_FAILED" | "TIMEOUT" | "CLOSED_EARLY" | "FRAME_TOO_LARGE" | "BAD_FRAME";
+
+  constructor(
+    message: string,
+    phase: FirefoxBrokerTransportPhase,
+    transportCode: FirefoxBrokerTransportError["transportCode"],
+  ) {
+    super(message);
+    this.name = "FirefoxBrokerTransportError";
+    this.phase = phase;
+    this.transportCode = transportCode;
+  }
+}
+
+export function isFirefoxBrokerTransportError(value: unknown): value is FirefoxBrokerTransportError {
+  return value instanceof FirefoxBrokerTransportError;
 }
 
 function exchange(
@@ -24,11 +53,13 @@ function exchange(
     const socket = net.createConnection(session.socket_path);
     let buffer = "";
     let settled = false;
+    let dispatched = false;
+    const phase = (): FirefoxBrokerTransportPhase => (dispatched ? "dispatch_unknown" : "not_dispatched");
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       socket.destroy();
-      reject(new Error(`Firefox broker response timeout after ${timeoutMs}ms`));
+      reject(new FirefoxBrokerTransportError(`Firefox broker response timeout after ${timeoutMs}ms`, phase(), "TIMEOUT"));
     }, timeoutMs);
 
     const cleanup = () => clearTimeout(timer);
@@ -36,10 +67,17 @@ function exchange(
       if (settled) return;
       settled = true;
       cleanup();
-      reject(new Error(`Firefox broker connection ${event} before a complete response frame`));
+      reject(new FirefoxBrokerTransportError(
+        `Firefox broker connection ${event} before a complete response frame`,
+        phase(),
+        "CLOSED_EARLY",
+      ));
     };
     socket.setEncoding("utf8");
-    socket.on("connect", () => socket.write(`${JSON.stringify(request)}\n`));
+    socket.on("connect", () => {
+      dispatched = true;
+      socket.write(`${JSON.stringify(request)}\n`);
+    });
     socket.on("data", (chunk) => {
       if (settled) return;
       buffer += chunk;
@@ -47,7 +85,11 @@ function exchange(
         settled = true;
         cleanup();
         socket.destroy();
-        reject(new Error(`Firefox broker response exceeds ${MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES} bytes`));
+        reject(new FirefoxBrokerTransportError(
+          `Firefox broker response exceeds ${MAX_FIREFOX_BROKER_RESPONSE_LINE_BYTES} bytes`,
+          "dispatch_unknown",
+          "FRAME_TOO_LARGE",
+        ));
         return;
       }
       const newline = buffer.indexOf("\n");
@@ -57,8 +99,8 @@ function exchange(
       socket.end();
       try {
         resolve(JSON.parse(buffer.slice(0, newline)) as FirefoxBrokerResponse);
-      } catch (error) {
-        reject(error);
+      } catch {
+        reject(new FirefoxBrokerTransportError("Firefox broker returned a malformed frame", "dispatch_unknown", "BAD_FRAME"));
       }
     });
     socket.on("end", () => rejectPrematureClose("ended"));
@@ -67,7 +109,11 @@ function exchange(
       if (settled) return;
       settled = true;
       cleanup();
-      reject(error);
+      reject(new FirefoxBrokerTransportError(
+        `Firefox broker transport error: ${error.message}`,
+        phase(),
+        dispatched ? "CLOSED_EARLY" : "CONNECT_FAILED",
+      ));
     });
   });
 }
@@ -80,7 +126,12 @@ export async function sendFirefoxBrokerRequest(
 ): Promise<FirefoxBrokerResponse> {
   const id = options.id ?? crypto.randomUUID();
   const timeoutMs = options.timeoutMs ?? DEFAULT_FIREFOX_BROKER_TIMEOUT_MS;
-  const request: FirefoxBrokerRequest = { id, op, params };
+  const request: FirefoxBrokerRequest = {
+    id,
+    op,
+    params,
+    ...(options.audienceId ? { audience_id: options.audienceId } : {}),
+  };
 
   if (options.signal?.aborted) {
     return {
@@ -92,7 +143,25 @@ export async function sendFirefoxBrokerRequest(
     };
   }
 
-  const responsePromise = exchange(session, request, timeoutMs);
+  const attempt = async (): Promise<FirefoxBrokerResponse> => {
+    const retry = options.readRetry;
+    const attempts = Math.max(1, retry?.attempts ?? 1);
+    let lastError: unknown;
+    for (let index = 0; index < attempts; index += 1) {
+      if (index > 0) {
+        await new Promise((resolve) => setTimeout(resolve, (retry?.backoffMs ?? 0) * index));
+        if (options.signal?.aborted) break;
+      }
+      try {
+        return await exchange(session, request, timeoutMs);
+      } catch (error) {
+        lastError = error;
+        if (!isFirefoxBrokerTransportError(error)) throw error;
+      }
+    }
+    throw lastError;
+  };
+  const responsePromise = attempt();
   if (!options.signal) return responsePromise;
 
   const onAbort = () => {
@@ -102,6 +171,7 @@ export async function sendFirefoxBrokerRequest(
         id: crypto.randomUUID(),
         op: "cancel_request",
         params: { target_request_id: id },
+        ...(options.audienceId ? { audience_id: options.audienceId } : {}),
       },
       Math.min(timeoutMs, 5_000),
     ).catch(() => undefined);

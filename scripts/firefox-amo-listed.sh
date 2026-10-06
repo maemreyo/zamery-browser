@@ -19,16 +19,23 @@ esac
 rm -rf "$OUT_DIR"
 mkdir -p "$STAGED_SOURCE"
 
-for asset in \
-  asset-discovery-v1.js \
-  asset-transfer-v1.js \
-  background.js \
-  content.js \
-  manifest.json \
-  popup.html \
-  popup.js; do
+# The production file set is derived from the manifest itself so it can never drift from what the extension loads.
+while IFS= read -r asset; do
   cp "$SOURCE_DIR/$asset" "$STAGED_SOURCE/$asset"
-done
+done < <(node --input-type=module - "$SOURCE_DIR/manifest.json" <<'NODE'
+import fs from "node:fs";
+
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const files = new Set(["manifest.json"]);
+for (const file of manifest.background?.scripts ?? []) files.add(file);
+for (const script of manifest.content_scripts ?? []) for (const file of script.js ?? []) files.add(file);
+if (manifest.browser_action?.default_popup) {
+  files.add(manifest.browser_action.default_popup);
+  files.add(manifest.browser_action.default_popup.replace(/\.html$/, ".js"));
+}
+for (const file of [...files].sort()) console.log(file);
+NODE
+)
 
 node --input-type=module - "$STAGED_SOURCE/manifest.json" "$METADATA" <<'NODE'
 import fs from "node:fs";

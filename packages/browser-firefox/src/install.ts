@@ -32,6 +32,8 @@ export function buildFirefoxNativeHostInstallPlan(options: {
   hostName?: string;
   homeDir?: string;
   nodePath?: string;
+  /** Absolute directory for the launcher, host copy and log. Defaults to ~/Library/Application Support/Zamery/browser-firefox. */
+  runtimeDir?: string;
 }): FirefoxNativeHostInstallPlan {
   const homeDir = options.homeDir ?? os.homedir();
   const hostName = options.hostName ?? DEFAULT_FIREFOX_NATIVE_HOST_NAME;
@@ -39,7 +41,7 @@ export function buildFirefoxNativeHostInstallPlan(options: {
   if (extensionIds.length === 0) throw new Error("at least one Firefox companion extension ID is required");
   if (new Set(extensionIds).size !== extensionIds.length) throw new Error("duplicate Firefox companion extension IDs are not allowed");
   const packageRuntimePath = fileURLToPath(new URL("../runtime/native-host.mjs", import.meta.url));
-  const runtimeDir = path.join(homeDir, "Library", "Application Support", "Zamery", "browser-firefox");
+  const runtimeDir = options.runtimeDir ?? path.join(homeDir, "Library", "Application Support", "Zamery", "browser-firefox");
   const binDir = path.join(runtimeDir, "bin");
   const installedHostPath = path.join(binDir, "native-host.mjs");
   const launcherPath = path.join(binDir, "native-host-launcher.sh");
@@ -72,8 +74,11 @@ export function installFirefoxNativeHost(options: {
   hostName?: string;
   homeDir?: string;
   nodePath?: string;
+  runtimeDir?: string;
   force?: boolean;
   dryRun?: boolean;
+  /** Extra environment for the host launcher (for isolated acceptance runs). Keys must be shell-safe identifiers. */
+  launcherEnv?: Readonly<Record<string, string>>;
 }): FirefoxNativeHostInstallPlan {
   const plan = buildFirefoxNativeHostInstallPlan(options);
   if (options.dryRun) return plan;
@@ -85,7 +90,7 @@ export function installFirefoxNativeHost(options: {
   fs.mkdirSync(binDir, { recursive: true, mode: 0o700 });
   fs.mkdirSync(manifestDir, { recursive: true });
 
-  if (fs.existsSync(plan.manifestPath) && !options.force) {
+  if (fs.existsSync(plan.manifestPath)) {
     let existing: unknown;
     try {
       existing = JSON.parse(fs.readFileSync(plan.manifestPath, "utf8"));
@@ -93,7 +98,9 @@ export function installFirefoxNativeHost(options: {
       existing = undefined;
     }
     if (JSON.stringify(existing) !== JSON.stringify(plan.manifest)) {
-      throw new Error(`refusing to overwrite different Native Messaging manifest: ${plan.manifestPath}`);
+      if (!options.force) throw new Error(`refusing to overwrite different Native Messaging manifest: ${plan.manifestPath}`);
+      // A forced overwrite is never silent or unrecoverable: the previous manifest is kept next to it.
+      fs.copyFileSync(plan.manifestPath, `${plan.manifestPath}.bak-${Date.now()}`);
     }
   }
 
@@ -101,8 +108,13 @@ export function installFirefoxNativeHost(options: {
   fs.chmodSync(plan.installedHostPath, 0o700);
 
   const nodePath = options.nodePath ?? process.execPath;
+  const envLines = Object.entries(options.launcherEnv ?? {}).map(([key, value]) => {
+    if (!/^[A-Z][A-Z0-9_]*$/.test(key)) throw new Error(`invalid launcher environment variable name: ${key}`);
+    return `export ${key}=${shellQuote(value)}`;
+  });
   const launcher = [
     "#!/bin/sh",
+    ...envLines,
     `printf '%s\\n' \"[zamery-browser-firefox-launcher] $(date '+%Y-%m-%dT%H:%M:%S%z') pid=$$ args=$*\" >>${shellQuote(plan.stderrLogPath)}`,
     `exec ${shellQuote(nodePath)} ${shellQuote(plan.installedHostPath)} 2>>${shellQuote(plan.stderrLogPath)}`,
     "",

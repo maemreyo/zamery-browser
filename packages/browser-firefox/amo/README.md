@@ -2,23 +2,28 @@
 
 This directory contains the metadata and release checklist for the first public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current candidate: `0.1.3` with stable Gecko ID `zamery-browser-firefox@zamery.local`.
+Current source candidate: `0.2.1` (companion protocol 2: scoped consent, tab groups, screenshots, explicit background control) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It is not signed or published yet. The signed `0.2.0` XPI belongs to the previous source tuple and must not be reused as evidence for `0.2.1`.
 
-## Why 0.1.3
+## Why 0.2.1
 
-The currently distributed Mozilla-signed companion is `0.1.2` on the unlisted/self-distributed channel. The first listed build uses a higher version so existing self-distributed installations can move forward to the public AMO release rather than attempting to reuse an already-distributed version.
+`0.2.0` introduced companion protocol 2 and the `tabGroups` permission. Background automation changes the runtime authorization/dispatch semantics and popup consent surface, so the modified source uses `0.2.1` even though the native wire protocol remains 2. A listed build always uses a version higher than an already-distributed build so existing installations can move forward rather than attempting to reuse a signed artifact built from different source.
 
 ## Production source boundary
 
 Only these files belong in the production submission:
 
+The file set is derived from `manifest.json` by `scripts/firefox-amo-listed.sh` (background scripts, content scripts, popup page and script, and the manifest itself), so it cannot drift from what the extension loads. Today that is:
+
 - `asset-discovery-v1.js`
 - `asset-transfer-v1.js`
 - `background.js`
 - `content.js`
+- `control-ops.js`
 - `manifest.json`
+- `policy.js`
 - `popup.html`
 - `popup.js`
+- `start.js`
 
 Do not include development manifests, experimental assets, repository state, credentials, or temporary signing files.
 
@@ -56,4 +61,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Do not merge the `0.1.3` manifest bump or replace the current `0.1.2` self-distributed release until the listed AMO submission has been accepted/published and the final public listing/version has been re-observed.
+Do not publish or announce companion `0.2.1` until the technical-preview acceptance matrix in `docs/technical-preview.md` has passed for its exact release-candidate tuple (`pnpm release:tuple`) and the signed XPI SHA-256 has been recorded. The signed `0.2.0` XPI is retained only as historical evidence for its own source tuple.

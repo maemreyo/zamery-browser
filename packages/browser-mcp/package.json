@@ -1,0 +1,51 @@
+{
+  "name": "@zamery/browser-mcp",
+  "version": "0.1.0-rc.3",
+  "type": "module",
+  "description": "Standalone MCP server that lets a local agent use a user's already-running Firefox through the Zamery BrowserProvider V2 contracts.",
+  "bin": {
+    "zamery-browser-mcp": "./dist/bin.js"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codex"
+  ],
+  "engines": {
+    "node": ">=22.19.0 <25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maemreyo/zamery-browser.git",
+    "directory": "packages/browser-mcp"
+  },
+  "homepage": "https://github.com/maemreyo/zamery-browser/tree/main/packages/browser-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/maemreyo/zamery-browser/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretypecheck": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "pnpm --filter @zamery/browser-provider build && pnpm --filter @zamery/browser-firefox build",
+    "test": "tsc -p tsconfig.json && node --test \"test/*.test.mjs\"",
+    "live": "tsc -p tsconfig.json && node --test --test-concurrency=1 --test-timeout=240000 \"live/*.test.mjs\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@zamery/browser-firefox": "workspace:*",
+    "@zamery/browser-provider": "workspace:*",
+    "zod": "4.6.5"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
+}

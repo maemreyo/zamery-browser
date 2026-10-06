@@ -1,0 +1,152 @@
+{
+  "at": "2026-10-05T16:39:55.625Z",
+  "firefox": {
+    "name": "environment",
+    "firefox": "157.0",
+    "companion": "0.2.0",
+    "hostProtocol": 2,
+    "companionProtocol": 2,
+    "journalSchema": 2,
+    "tabGroupsApi": true
+  },
+  "checks": [
+    {
+      "name": "environment",
+      "firefox": "157.0",
+      "companion": "0.2.0",
+      "hostProtocol": 2,
+      "companionProtocol": 2,
+      "journalSchema": 2,
+      "tabGroupsApi": true
+    },
+    {
+      "name": "single-tab-isolation",
+      "sharedTabs": 1,
+      "unsharedProbed": 3,
+      "snapshotDenied": true,
+      "screenshotDenied": true
+    },
+    {
+      "name": "snapshot-privacy",
+      "valuesExported": false,
+      "canariesAbsent": 3,
+      "textBlocks": 1
+    },
+    {
+      "name": "act-real-dom",
+      "fillOutcome": "completed",
+      "clickOutcome": "completed",
+      "pageResult": "saved:Agent Name",
+      "eventsTrusted": false
+    },
+    {
+      "name": "credential-handoff",
+      "flagged": [
+        "Password",
+        "Verification code"
+      ],
+      "passwordUntouched": true,
+      "controlAfterRefusal": "user_control",
+      "resumedByUserOnly": true
+    },
+    {
+      "name": "spa-staleness",
+      "oldRefStale": "page_navigated",
+      "agentStillClaimed": true
+    },
+    {
+      "name": "manual-navigation",
+      "control": "user_control",
+      "reason": "manual_navigation"
+    },
+    {
+      "name": "origin-change",
+      "deniedUntilConfirmed": true,
+      "newSiteNotLeaked": true
+    },
+    {
+      "name": "tab-switch-and-popup",
+      "popupShared": false,
+      "control": "tab_switched"
+    },
+    {
+      "name": "group-membership-snapshot",
+      "lateJoinerShared": false,
+      "leaverRegainedAccess": false,
+      "incompleteMembershipReported": true
+    },
+    {
+      "name": "group-structural-protection",
+      "updateRefused": true,
+      "importRefused": true
+    },
+    {
+      "name": "group-write-real-firefox",
+      "createUpdateMoveActivateRemove": true,
+      "lastMemberDeletesGroup": true,
+      "collapsedGroupExpandedOnActivate": true
+    },
+    {
+      "name": "owned-tab-lifecycle",
+      "createInspectNavigateReloadClose": true,
+      "duplicateCreatePrevented": true,
+      "userTabCloseRefused": true,
+      "fileSchemeRefused": true
+    },
+    {
+      "name": "screenshot-rect-pixels",
+      "widthPx": 400,
+      "heightPx": 240,
+      "quadrantsMatch": true,
+      "devicePixelRatio": 1
+    },
+    {
+      "name": "screenshot-viewport-jpeg",
+      "bytes": 21427,
+      "width": 1366,
+      "height": 683
+    },
+    {
+      "name": "screenshot-limits-and-expiry",
+      "oversizeRejected": true,
+      "artifactExpiredOnRevoke": true,
+      "fileDeleted": true
+    },
+    {
+      "name": "private-window",
+      "opened": "not openable: acceptance_private_window failed: {\"code\":\"BROWSER_REQUEST_FAILED\",\"message\":\"Extension does not have permission for incognito mode\"}",
+      "neverShared": true
+    },
+    {
+      "name": "extension-reload-rebind",
+      "state": "rebind_required",
+      "deadlineKept": true,
+      "oldRefsDead": true,
+      "rebound": true
+    },
+    {
+      "name": "firefox-restart",
+      "stateAfterRestart": "rebind_required",
+      "reason": "restart",
+      "deadlineAfterRestart": "2026-10-08T16:39:45.357Z",
+      "originalDeadline": "2026-10-08T16:39:45.357Z"
+    },
+    {
+      "name": "trusted-human-input",
+      "source": "Marionette element send keys (isTrusted=true)",
+      "control": "human_interaction",
+      "agentWriteBlocked": true,
+      "humanTextPreserved": true
+    },
+    {
+      "name": "trusted-human-click",
+      "control": "user_control"
+    },
+    {
+      "name": "canary-scan",
+      "filesScanned": 5,
+      "secretsChecked": 7,
+      "found": 0
+    }
+  ]
+}

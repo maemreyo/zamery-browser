@@ -14,13 +14,19 @@ The companion communicates with the locally installed Zamery Native Messaging ho
 
 Data handed to the local Native Messaging host may subsequently be used by the software or AI system that the user has chosen to connect to Zamery Browser. The privacy terms of that connected software or service apply to any processing it performs after the local handoff.
 
+## What is shared, and what is not
+
+Only the tabs and tab groups the user selects in the companion panel are visible to the connected local agent. Unshared tabs are not probed, listed, snapshotted or captured. Private windows are never shared. Snapshots omit form-field values and hidden controls; sign-in, one-time-code and payment-like fields are flagged and the agent is not allowed to write to them. Screenshots show whatever is visible in the shared tab, including private content, and are handed to the connected agent.
+
 ## Storage
 
-The companion may use Firefox extension-local storage for operational state such as authorization and browser/session identifiers. It is not intended as a general archive of browsing history or page content.
+- **Firefox extension-local storage**: an installation/profile identifier, and, for fixed-duration approvals (1–30 days), a consent record: grant id, deadline, allowed actions, the connected agent's identifier and the *origins* (site names, not paths, titles or page content) that were shared. It never stores tab or group identities, URLs, titles, page text or form values, and a restart does not restore access: the user selects tabs again.
+- **Local files written by the native host** under `~/Library/Application Support/Zamery/browser-firefox`: a per-profile mutation journal with a typed allowlist (operation, opaque ids, outcome) — never typed text, URLs, titles or page content — and a diagnostic log. Legacy plaintext journals from earlier versions are migrated to tombstones and deleted.
+- **Screenshot artifacts**: stored for at most 30 minutes (and removed as soon as sharing ends or the consumer closes) in a per-consumer directory readable only by the user. They are never indexed or uploaded by the companion.
 
 ## User control
 
-Browser control requires an explicit authorization grant to the current local native-host session. Removing the add-on, revoking the local authorization, or stopping the local host prevents further use through that connection.
+Browser control requires an explicit grant created in Firefox by the user: which agent, which tabs/groups, what it may do, and for how long (this session, or 1–30 days). The user can take over at any time, and *Stop sharing* ends access immediately and discards pending results and screenshots. Removing the add-on or stopping the local host also ends access; a restart never silently restores it.
 
 ## Remote services
 

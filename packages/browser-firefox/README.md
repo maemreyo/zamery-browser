@@ -29,6 +29,30 @@ The package exports both V1 and V2 provider factories:
 - `createBrowserProvider()` / `createFirefoxBrowserProvider()`
 - `createBrowserProviderV2()` / `createFirefoxBrowserProviderV2()`
 
+## Optional interfaces
+
+`FirefoxBrowserProviderV2` also implements, as separate versioned interfaces from `@zamery/browser-provider`:
+
+- `BrowserAuthorizationProviderV1` — scope, expiry and restart status (`authorizationDetail`).
+- `BrowserControlProviderV1` — claim, hand-off requests and `mutationStatus`.
+- `BrowserTabProviderV1` — create/navigate/reload/activate/close-owned tabs.
+- `BrowserTabGroupProviderV1` — Firefox tab groups (opaque handles; membership snapshot by default).
+- `BrowserArtifactProviderV1` — bounded screenshots stored as short-lived, integrity-checked artifacts.
+
+Use the structural guards (`isBrowserControlProviderV1`, …) before calling them. Options worth knowing: `audienceId` (a stable consumer id keeps a grant across your restarts), `clientLabel` (informational), `artifactRoot`.
+
+Use `createFirefoxRequestId()` for mutation ids; the native host rejects ids older than its replay horizon and reconciles a lost response by id (`mutationStatus`).
+
+## Setup and diagnostics
+
+```bash
+npx @zamery/browser-firefox setup --dry-run   # show what would be written
+npx @zamery/browser-firefox setup             # install the Native Messaging host (never restarts Firefox)
+npx @zamery/browser-firefox doctor            # non-mutating health report (--json for tools)
+```
+
+`doctor` only reports what it can observe (installed files, the profile's add-on registry entry for this add-on, a live status handshake). `setup` refuses to overwrite a different manifest unless `--force`, and then keeps a backup.
+
 ## Firefox companion
 
 The Firefox path requires the Mozilla-signed **Zamery Browser Companion** and the local Native Messaging host. The companion is currently signed/unlisted rather than a searchable public AMO listing.
@@ -61,8 +85,9 @@ The current installer targets macOS Firefox Native Messaging locations. It write
 
 ## Compatibility
 
-- Node.js `>=22.19.0 <25`.
+- Node.js `>=22.19.0 <25`; Firefox desktop 142 or newer (tab groups are feature-detected).
 - `@zamery/browser-provider` at the matching package release.
+- Native wire protocol 2: the host and companion must speak the same revision or every operation fails closed. `doctor` shows the observed pair.
 
 ## Related packages
 

@@ -7,6 +7,17 @@ export function firefoxCompanionManifestPath(kind: FirefoxCompanionManifestKind)
   return fileURLToPath(new URL(`../runtime/companion/${file}`, import.meta.url));
 }
 
-export function firefoxCompanionAssetPath(file: "asset-discovery-v1.js" | "asset-transfer-v1.js" | "background.js" | "content.js" | "popup.html" | "popup.js"): string {
+export type FirefoxCompanionAssetFile =
+  | "asset-discovery-v1.js"
+  | "asset-transfer-v1.js"
+  | "background.js"
+  | "content.js"
+  | "control-ops.js"
+  | "policy.js"
+  | "popup.html"
+  | "popup.js"
+  | "start.js";
+
+export function firefoxCompanionAssetPath(file: FirefoxCompanionAssetFile): string {
   return fileURLToPath(new URL(`../runtime/companion/${file}`, import.meta.url));
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion (Development)",
-  "version": "0.1.2",
+  "version": "0.2.1",
   "description": "Development identity for the Zamery browser companion canary.",
   "browser_specific_settings": {
     "gecko": {
@@ -20,10 +20,12 @@
     "<all_urls>",
     "nativeMessaging",
     "storage",
+    "tabGroups",
     "tabs"
   ],
+  "incognito": "not_allowed",
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["policy.js", "background.js", "control-ops.js", "artifacts.js", "start.js"],
     "persistent": true
   },
   "browser_action": {
