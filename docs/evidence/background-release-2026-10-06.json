@@ -17,7 +17,7 @@
     "amo_prepare": "PASS",
     "amo_lint": "0 errors / 0 warnings",
     "amo_source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
-    "unsigned_amo_zip_sha256": "f89f41244a0c5c235c04bdff87d8227312d0c7dfafbe90f75e57603e30623b6f"
+    "unsigned_amo_zip": "prepared successfully; hash intentionally not retained because unsigned build ZIP metadata is not release authority"
   },
   "npm": {
     "registry_smoke_install": "PASS",
