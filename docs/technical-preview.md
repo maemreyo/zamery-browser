@@ -6,7 +6,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 **Stable `v0.2.2` accepted.** Stable npm artifacts are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. npm `latest` resolves to the stable tuple. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
 
-`main` may contain unreleased post-`v0.2.2` work. In particular, companion source `0.2.3` adds branding/icon assets and is not the signed stable artifact until a new signed release is accepted. Stable claims in this document continue to refer to the exact `v0.2.2` tuple above.
+`main` contains post-`v0.2.2` branding work. Companion `0.2.3` adds the public icon/toolbar branding and was approved for the public AMO listing on 2026-10-06 (AMO version `6546568`). Its exact signed-XPI digest/source tuple has not yet been recorded in this repository's durable release evidence, so the stable claims in this document continue to refer to the exact `v0.2.2` tuple above.
 
 ## What exists (by layer)
 

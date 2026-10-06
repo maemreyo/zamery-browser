@@ -2,7 +2,7 @@
 
 This directory contains the metadata and release checklist for the first public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current source candidate: `0.2.3` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It adds the public Zamery Browser icon/toolbar branding on top of the accepted `0.2.2` runtime. It is not signed or published yet. The signed `0.2.2` XPI belongs to the stable release tuple and must not be reused as source-compatibility evidence for `0.2.3`.
+Current public AMO version: `0.2.3` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It adds the public Zamery Browser icon/toolbar branding on top of the accepted `0.2.2` runtime. Mozilla automated screening approved `0.2.3` for the public listing on 2026-10-06 (AMO version `6546568`). The signed `0.2.2` XPI remains the recorded stable release artifact until the exact `0.2.3` signed-XPI digest/source tuple is captured in release evidence.
 
 ## Why 0.2.3
 
@@ -66,4 +66,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Do not publish or announce companion `0.2.3` until the relevant release checks have passed for its exact source tuple (`pnpm release:tuple`) and the signed XPI SHA-256 has been recorded. The signed `0.2.2` XPI remains the current stable artifact until that happens.
+Companion `0.2.3` is approved and public on AMO. Before promoting it as the repository's recorded stable release artifact, capture the exact signed XPI SHA-256 and source tuple with `pnpm release:tuple --xpi <signed-0.2.3.xpi>` and update the durable release evidence. Until then, the signed `0.2.2` XPI remains the recorded stable artifact.
