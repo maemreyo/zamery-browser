@@ -1,6 +1,6 @@
 {
   "name": "@zamery/browser-provider",
-  "version": "0.2.2-rc.3",
+  "version": "0.2.2",
   "type": "module",
   "description": "Provider-neutral BrowserProvider V1 and V2 contracts for live browser integrations.",
   "types": "./dist/index.d.ts",

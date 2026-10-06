@@ -1,0 +1,86 @@
+name: Stable distribution acceptance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  clean-macos-install:
+    name: Clean macOS install from published artifacts
+    runs-on: macos-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Record clean runner facts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sw_vers
+          uname -m
+          node --version
+          which node
+          npm --version
+
+      - name: Install exact stable packages without repository checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/zamery-stable"
+          cd "$RUNNER_TEMP/zamery-stable"
+          npm init -y
+          npm install --save-exact \
+            @zamery/browser-provider@0.2.2 \
+            @zamery/browser-firefox@0.2.1 \
+            @zamery/browser-mcp@0.1.0 \
+            @zamery/pi-browser@0.2.1
+          npm ls @zamery/browser-provider @zamery/browser-firefox @zamery/browser-mcp @zamery/pi-browser
+          test -f node_modules/@zamery/browser-mcp/codex/AGENTS.snippet.md
+          node --input-type=module <<'NODE'
+          await import("@zamery/browser-provider");
+          await import("@zamery/browser-firefox");
+          await import("@zamery/browser-mcp");
+          await import("@zamery/pi-browser");
+          NODE
+
+      - name: Verify signed companion artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zamery-stable"
+          curl -fsSL \
+            https://github.com/maemreyo/zamery-browser/releases/download/v0.2.2-preview.1/zamery-browser-companion-0.2.2.xpi \
+            -o zamery-browser-companion-0.2.2.xpi
+          observed="$(shasum -a 256 zamery-browser-companion-0.2.2.xpi | awk '{print $1}')"
+          expected="56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9"
+          test "$observed" = "$expected"
+          unzip -l zamery-browser-companion-0.2.2.xpi | grep -E 'META-INF/mozilla\.rsa|manifest\.json'
+
+      - name: Verify native-host setup and doctor
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/zamery-stable"
+          npx zamery-browser-firefox setup --dry-run
+          npx zamery-browser-firefox setup
+          npx zamery-browser-firefox doctor --json > doctor.json
+          cat doctor.json
+          node --input-type=module <<'NODE'
+          import fs from "node:fs";
+          const report = JSON.parse(fs.readFileSync("doctor.json", "utf8"));
+          if (!report.ok) throw new Error("doctor reported a blocking problem");
+          for (const id of ["node", "host-manifest", "host-launcher", "host-copy"]) {
+            const finding = report.findings.find((item) => item.id === id);
+            if (!finding || finding.severity !== "ok") {
+              throw new Error(`expected ${id}=ok, got ${JSON.stringify(finding)}`);
+            }
+          }
+          NODE
