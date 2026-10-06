@@ -8,7 +8,7 @@ Current public AMO version: `0.2.5` (companion protocol 2) with stable Gecko ID 
 
 `0.2.3` made the branded Companion public. `0.2.4` was a transient branding source candidate and was not promoted. `0.2.5` incorporates the cooperative background-control fix and is the accepted Companion for Zamery Browser `v0.2.3`.
 
-The agent-action-overlay lane has now rebased on that immutable `0.2.5` release and uses Companion `0.2.6`. The `0.2.6` candidate adds advisory exact-target action cues plus capture suppression while keeping native wire protocol 2 and BrowserProvider V2 unchanged. It is not a signed/public artifact until the AMO submission produces an exact signed-XPI/source tuple.
+The agent-action-overlay lane has now rebased on that immutable `0.2.5` release and uses Companion `0.2.6`. The `0.2.6` candidate adds advisory exact-target action cues plus capture suppression while keeping native wire protocol 2 and BrowserProvider V2 unchanged. It is Mozilla-signed/public as AMO version `6548018`, file `5092157`; the signed XPI SHA-256 is `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`.
 
 ## Production source boundary
 
@@ -69,4 +69,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Companion `0.2.5` is approved/public on AMO and remains the accepted browser artifact for Zamery Browser `v0.2.3`. Companion `0.2.6` passes the source gate (`pnpm verify`, live Firefox 31/31, AMO lint 0 errors / 0 warnings / 0 notices) with staged production-source SHA-256 `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`. Before promoting `0.2.6`, obtain the Mozilla-signed XPI, verify it with `pnpm release:tuple --xpi`, and record the exact XPI/source tuple plus signed real-profile and distribution acceptance.
+Companion `0.2.5` remains the accepted browser artifact for stable Zamery Browser `v0.2.3`. Companion `0.2.6` passes the source gate (`pnpm verify`, live Firefox 31/31, AMO lint 0 errors / 0 warnings / 0 notices), exact signed-XPI/source verification, and signed real-profile acceptance. Its production-source SHA-256 is `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`; signed XPI SHA-256 is `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`. Stable `v0.2.4` promotion still requires the published npm tuple and clean-distribution acceptance.
