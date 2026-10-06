@@ -2,11 +2,11 @@
 
 This directory contains the metadata and release checklist for the first public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current source candidate: `0.2.1` (companion protocol 2: scoped consent, tab groups, screenshots, explicit background control) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It is not signed or published yet. The signed `0.2.0` XPI belongs to the previous source tuple and must not be reused as evidence for `0.2.1`.
+Current source candidate: `0.2.3` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It adds the public Zamery Browser icon/toolbar branding on top of the accepted `0.2.2` runtime. It is not signed or published yet. The signed `0.2.2` XPI belongs to the stable release tuple and must not be reused as source-compatibility evidence for `0.2.3`.
 
-## Why 0.2.1
+## Why 0.2.3
 
-`0.2.0` introduced companion protocol 2 and the `tabGroups` permission. Background automation changes the runtime authorization/dispatch semantics and popup consent surface, so the modified source uses `0.2.1` even though the native wire protocol remains 2. A listed build always uses a version higher than an already-distributed build so existing installations can move forward rather than attempting to reuse a signed artifact built from different source.
+`0.2.2` is already Mozilla-signed and distributed. Adding extension icons changes the signed source bytes, so the branded source uses `0.2.3` even though browser-control semantics and native wire protocol remain unchanged. A listed/signed build always uses a version higher than an already-distributed build so existing installations can move forward rather than attempting to reuse a signed artifact built from different source.
 
 ## Production source boundary
 
@@ -19,6 +19,11 @@ The file set is derived from `manifest.json` by `scripts/firefox-amo-listed.sh` 
 - `background.js`
 - `content.js`
 - `control-ops.js`
+- `icons/zamery-16.png`
+- `icons/zamery-32.png`
+- `icons/zamery-48.png`
+- `icons/zamery-96.png`
+- `icons/zamery-128.png`
 - `manifest.json`
 - `policy.js`
 - `popup.html`
@@ -61,4 +66,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Do not publish or announce companion `0.2.1` until the technical-preview acceptance matrix in `docs/technical-preview.md` has passed for its exact release-candidate tuple (`pnpm release:tuple`) and the signed XPI SHA-256 has been recorded. The signed `0.2.0` XPI is retained only as historical evidence for its own source tuple.
+Do not publish or announce companion `0.2.3` until the relevant release checks have passed for its exact source tuple (`pnpm release:tuple`) and the signed XPI SHA-256 has been recorded. The signed `0.2.2` XPI remains the current stable artifact until that happens.

@@ -15,12 +15,15 @@ const sh = (command, args, options = {}) => { try { return execFileSync(command,
 const json = (file) => JSON.parse(fs.readFileSync(path.join(root, file), "utf8"));
 
 const companion = json("packages/browser-firefox/runtime/companion/manifest.json");
+const iconFiles = (icons) => icons && typeof icons === "object" ? Object.values(icons).filter((value) => typeof value === "string") : [];
 const stagedFiles = [...new Set([
   "manifest.json",
+  ...iconFiles(companion.icons),
   ...(companion.background?.scripts ?? []),
   ...(companion.content_scripts ?? []).flatMap((entry) => entry.js ?? []),
   companion.browser_action?.default_popup,
   companion.browser_action?.default_popup?.replace(/\.html$/, ".js"),
+  ...iconFiles(companion.browser_action?.default_icon),
 ].filter(Boolean))].sort();
 const sourceHash = crypto.createHash("sha256");
 for (const file of stagedFiles) {
