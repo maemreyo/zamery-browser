@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion",
-  "version": "0.2.3",
-  "description": "Companion for controlling the user's already-running browser through Zamery BrowserProvider.",
+  "version": "0.2.4",
+  "description": "Share selected Firefox tabs with local AI agents through Zamery Browser, with explicit access and user-controlled takeover.",
   "icons": {
     "16": "icons/zamery-16.png",
     "32": "icons/zamery-32.png",
@@ -39,7 +39,7 @@
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Zamery Browser",
+    "default_title": "Zamery Browser Companion",
     "default_icon": {
       "16": "icons/zamery-16.png",
       "32": "icons/zamery-32.png"

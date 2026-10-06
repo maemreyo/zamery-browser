@@ -2,6 +2,14 @@
 
 The visual identity is deliberately small and functional: a browser-shaped tile, a connected `Z` path, and a blue-to-violet field with a cyan signal accent. It is designed to stay legible at Firefox toolbar size and still feel identifiable on GitHub and release surfaces.
 
+## Product naming
+
+- **Zamery Browser** is the product and repository name.
+- **Zamery Browser Companion** is the Firefox add-on name and should be used in Firefox, AMO, and add-on-specific UI.
+- **Your browser. Explicitly shared.** is the Companion tagline.
+
+Do not shorten the add-on name to `Zamery Browser` on surfaces whose primary purpose is to identify the installed Firefox extension.
+
 ## Canonical assets
 
 - `docs/assets/brand/zamery-browser-mark.svg` — canonical vector mark.
