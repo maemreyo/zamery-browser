@@ -28,7 +28,7 @@ In a tested Codex setup the model did not receive inline MCP images, so it guess
 1. The agent calls `browser_status`. It always works, even before Firefox is connected or anything is shared, and says what to ask you. If Firefox is connected but nothing is shared, the agent may call `browser_request_access` once to ask for your attention. The request contains no tab/group/action/duration choices and never grants anything.
 2. Firefox shows a toolbar badge and, if you enabled optional notifications, a generic OS notification. You open the **Zamery Browser** panel and choose the local agent, the tab(s) or group, what the agent may do, and for how long (this session, or 1–30 days).
 3. The agent calls `browser_contexts` / `browser_snapshot`. A snapshot with `claim=true` (default) takes the write claim; the returned short refs (`e1`, `e2`, …) can then be used with `browser_click`, `browser_fill`, `browser_type`, `browser_key`.
-4. You can **take over** at any time from the panel (or by simply using the page). While you are in control the agent cannot act; it can only *ask* you to resume.
+4. You can **take over** at any time from the panel. In the default `interactive` mode, using the claimed page also hands control to you. With explicit **Background control**, ordinary use of the same shared page only invalidates the agent's old snapshot; it can take a fresh snapshot and continue. While explicit user control is active, the agent cannot act and can only *ask* you to resume.
 
 Sign-in, one-time-code and payment fields are never filled by the agent: they are flagged `CREDENTIAL` in snapshots and writes are refused; use `browser_handoff` (`request_user_takeover`).
 

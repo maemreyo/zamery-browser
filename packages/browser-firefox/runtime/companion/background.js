@@ -1859,8 +1859,10 @@ async function actOnContext(params, requestId, message) {
       }
       if (urlHash(currentDocument?.url) !== ref.u) throwRef("page_navigated");
       if ((Number(currentDocument?.interaction_generation) || 0) !== ref.ig) {
-        // A trusted human gesture touched the page since the observation: the user is driving now.
-        userTakeover("human_interaction");
+        // A trusted human gesture always invalidates the observation. Interactive mode also hands
+        // control to the user; explicit background mode keeps the claim so the agent can re-snapshot
+        // and continue without requiring a manual Resume.
+        if (binding?.controlMode !== "background") userTakeover("human_interaction");
         throw newError("STALE_ELEMENT_REF", "the user interacted with the page since the observation", "user_interaction");
       }
       // Authority could have moved while we awaited the browser; check once more right before dispatch.
@@ -2200,7 +2202,11 @@ browser.runtime.onMessage.addListener((message, sender) => {
     if (sender?.id !== browser.runtime.id || typeof sender?.tab?.id !== "number") return undefined;
     const tabId = sender.tab.id;
     interactionGenerations.set(tabId, (interactionGenerations.get(tabId) || 0) + 1);
-    if (control.state === "agent_claimed" && control.claimedContextId === contextIdFor(tabId)) userTakeover("human_interaction");
+    if (control.state === "agent_claimed"
+      && control.claimedContextId === contextIdFor(tabId)
+      && binding?.controlMode !== "background") {
+      userTakeover("human_interaction");
+    }
     return undefined;
   }
 
@@ -2295,7 +2301,9 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
       pendingOriginChanges[String(tabId)] = { from: entry.origin, to: origin };
       if (claimedHere) userTakeover("origin_changed");
       setAttention("origin_confirmation_required", { audienceId: currentAudience(), tabId });
-    } else if (claimedHere && Date.now() - lastAgentMutationAt > AGENT_NAVIGATION_ATTRIBUTION_MS) {
+    } else if (claimedHere
+      && binding?.controlMode !== "background"
+      && Date.now() - lastAgentMutationAt > AGENT_NAVIGATION_ATTRIBUTION_MS) {
       userTakeover("manual_navigation");
     }
   }

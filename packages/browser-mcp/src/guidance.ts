@@ -46,7 +46,7 @@ const REASON_GUIDANCE: Readonly<Record<string, string>> = {
   claim_required: "Take the claim first: browser_snapshot with claim=true, then use the new refs.",
   claim_changed: "The claim changed. Take a new browser_snapshot (claim=true) and use its refs.",
   claim_context_changed: "The claim moved to another tab. Take a new browser_snapshot (claim=true) of this tab.",
-  user_interaction: "The user used the page, so they are in control now. Wait for them to resume, then take a new snapshot.",
+  user_interaction: "The user changed the page after your observation. Check browser_status: with background control still claimed, take a new snapshot and continue; if control moved to the user, wait for Resume.",
   page_navigated: "The page navigated. Take a new browser_snapshot and use its refs.",
   document_changed: "The page was replaced. Take a new browser_snapshot and use its refs.",
   grant_changed: "The user's sharing changed. Check browser_status, then take a new snapshot.",

@@ -614,7 +614,7 @@ describe("live Firefox: trusted human gestures (Marionette-synthesized input)", 
   let marionette;
   after(() => marionette?.close());
 
-  it("a trusted keystroke on the claimed tab takes control immediately, and the agent's observation dies", async () => {
+  it("a trusted keystroke in background mode invalidates the old observation without forcing Resume", async () => {
     await reset();
     const tab = await openTab("/form", { active: true });
     await live.user("activate_tab", { tab_id: tab.id });
@@ -628,24 +628,32 @@ describe("live Firefox: trusted human gestures (Marionette-synthesized input)", 
     await marionette.type("#name", "typed by a human");
     await sleep(800);
     const control = (await call("browser_status")).structuredContent.authorization.control;
-    assert.equal(control.state, "user_control");
-    assert.equal(control.reason, "human_interaction");
+    assert.equal(control.state, "agent_claimed");
+    assert.equal(control.reason, null);
     const blocked = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "agent overwrite" });
     assert.equal(blocked.isError, true);
     assert.equal(blocked.structuredContent.outcome, "not_started");
     assert.equal(await pageValue(tab.id, "document.getElementById('name').value"), "PREFILLED-NAME-CANARYtyped by a human", "the human's text was not overwritten");
-    note("trusted-human-input", { source: "Marionette element send keys (isTrusted=true)", control: control.reason, agentWriteBlocked: true, humanTextPreserved: true });
+    const fresh = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    assert.equal(fresh.structuredContent.claim.claimed, true);
+    const save = fresh.structuredContent.nodes.find((node) => node.name === "Save").ref;
+    assert.equal((await call("browser_click", { context_id: `tab:${tab.id}`, observation_id: fresh.structuredContent.observation_id, ref: save })).isError, undefined);
+    note("trusted-human-input", { source: "Marionette element send keys (isTrusted=true)", control: control.state, staleWriteBlocked: true, humanTextPreserved: true, continuedWithoutResume: true });
   });
 
-  it("a trusted click takes control too", async () => {
-    await live.user("resume");
+  it("a trusted click in background mode also keeps the claim alive", async () => {
     const tabs = (await live.user("tabs")).tabs;
     const tab = tabs.find((t) => t.url.endsWith("/form"));
-    await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const before = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
     await marionette.click("#save");
     await sleep(800);
-    assert.equal((await call("browser_status")).structuredContent.authorization.control.state, "user_control");
-    note("trusted-human-click", { control: "user_control" });
+    const control = (await call("browser_status")).structuredContent.authorization.control;
+    assert.equal(control.state, "agent_claimed");
+    const oldSave = before.structuredContent.nodes.find((node) => node.name === "Save").ref;
+    const stale = await call("browser_click", { context_id: `tab:${tab.id}`, observation_id: before.structuredContent.observation_id, ref: oldSave });
+    assert.equal(stale.isError, true);
+    assert.equal(stale.structuredContent.outcome, "not_started");
+    note("trusted-human-click", { control: control.state, staleWriteBlocked: true, continuedWithoutResume: true });
   });
 });
 
