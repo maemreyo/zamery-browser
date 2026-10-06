@@ -1,6 +1,6 @@
 {
   "at": "2026-10-06T05:20:00Z",
-  "status": "STABLE_ARTIFACTS_ACCEPTED_DIST_TAG_PROMOTION_PENDING",
+  "status": "STABLE_RELEASE_ACCEPTED",
   "release": {
     "tag": "v0.2.2",
     "package_source_commit": "edd596886e7cb795bfa7c7ef5cbe42593123dbe0",
@@ -16,28 +16,28 @@
     "@zamery/browser-provider": {
       "version": "0.2.2",
       "pre_release_dist_tag": "preview",
-      "latest_observed_2026_10_06": "0.2.1",
+      "latest_observed_2026_10_06": "0.2.2",
       "shasum": "f9a63878a3b0b99009368f53db54c68494cc0675",
       "integrity": "sha512-6L3xFR/hwzoZYKF5vXXHo0QFU9sC/PUtGEGWBrRbfcRZjKpMXe1+kSdolfeFJ4TL6H7S9LnA4pBdBCQFVCZNqg=="
     },
     "@zamery/browser-firefox": {
       "version": "0.2.1",
       "pre_release_dist_tag": "preview",
-      "latest_observed_2026_10_06": "0.2.0",
+      "latest_observed_2026_10_06": "0.2.1",
       "shasum": "1b2e625bb0ae57a0d9508a28512d9d558e745535",
       "integrity": "sha512-eW2MQ2TK6dhRhZksC3tGx3W0ggSbfgg2BLOqxmQTX1TpaoNPNKZ/VGoWE0l7MWMCA0tmhzbZkmSjkA/rA0LveA=="
     },
     "@zamery/browser-mcp": {
       "version": "0.1.0",
       "pre_release_dist_tag": "preview",
-      "latest_observed_2026_10_06": "0.1.0-rc.2",
+      "latest_observed_2026_10_06": "0.1.0",
       "shasum": "13af8502ebbf4d3bc98e43b7a996390212235c32",
       "integrity": "sha512-QAGgphxVjkAIymDGdVRC52GMAyvYxFm1f4XBM4ozeb9nktTzMZZ/1atggQiAj0xXJcjrC3R4+ktgN60jE6fp5A=="
     },
     "@zamery/pi-browser": {
       "version": "0.2.1",
       "pre_release_dist_tag": "preview",
-      "latest_observed_2026_10_06": "0.2.0",
+      "latest_observed_2026_10_06": "0.2.1",
       "shasum": "cd22c77de277258f7c2fd52d66264b7ebb707b69",
       "integrity": "sha512-TawDakA524EUEkeF/ZPr7BIbWYm+p0ueCjcvlIbF0efyecnWPw0tOwJDFFAMMoAfDGVly6mtmSw1TJT/sBfjNg=="
     }
@@ -78,14 +78,12 @@
     }
   },
   "dist_tag_promotion": {
-    "status": "BLOCKED_ON_NPM_TRUSTED_PUBLISHER_PERMISSION",
+    "status": "PASS",
+    "resolved_at": "2026-10-06T06:38:53Z",
     "failed_github_actions_run_id": 37419073808,
-    "failure": "npm returned 403 because the publish.yml trusted publisher cannot manage dist-tags",
+    "historical_failure": "npm returned 403 because the publish.yml trusted publisher could not manage dist-tags",
     "workflow_fix_merge_commit": "951395b6bd1894faac0130c90b80a445f50e50f5",
-    "workflow_state": "Uses npm 11.21.0 and native npm dist-tag OIDC authentication; no hand-rolled token exchange remains.",
-    "required_maintainer_action": "Enable Allow npm dist-tag for the publish.yml trusted publisher on all four npm packages, then rerun Publish npm packages on main."
+    "resolution": "A maintainer authenticated through npm CLI and promoted all four stable versions to latest. The release workflow no longer contains a separate dist-tag promotion step; new stable versions published by npm receive latest during publish, while immutable versions are skipped."
   },
-  "remaining_release_gates": [
-    "NPM_LATEST_DIST_TAG_PROMOTION"
-  ]
+  "remaining_release_gates": []
 }
