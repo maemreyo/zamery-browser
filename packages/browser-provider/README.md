@@ -18,7 +18,7 @@ npm install @zamery/browser-provider
 - Declared vs observed action semantics.
 - Validated action receipts that preserve ambiguous outcomes instead of converting them into success.
 - Side-by-side V1/V2 contracts so protocol evolution is explicit.
-- Optional, independently versioned interfaces with structural type guards: `BrowserAuthorizationProviderV1`, `BrowserControlProviderV1` (claim / hand-off / mutation status), `BrowserTabProviderV1`, `BrowserTabGroupProviderV1` and `BrowserArtifactProviderV1` (bounded screenshots). V2 stays the core contract; these never widen its enums.
+- Optional, independently versioned interfaces with structural type guards: `BrowserAttentionProviderV1` (bounded user-attention requests that never grant authority), `BrowserAuthorizationProviderV1`, `BrowserControlProviderV1` (claim / hand-off / mutation status), `BrowserTabProviderV1`, `BrowserTabGroupProviderV1` and `BrowserArtifactProviderV1` (bounded screenshots). V2 stays the core contract; these never widen its enums.
 - Optional `BrowserAssetProviderV1` contracts for bounded, opaque browser-backed asset discovery and transfer without exposing source URLs or credentials.
 
 ## Example

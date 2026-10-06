@@ -39,7 +39,9 @@ export function createFakeBrowser(options = {}) {
     windowsOnFocusChanged: new Emitter(), windowsOnRemoved: new Emitter(), windowsOnCreated: new Emitter(),
     groupsOnCreated: new Emitter(), groupsOnUpdated: new Emitter(), groupsOnMoved: new Emitter(), groupsOnRemoved: new Emitter(),
     runtimeOnMessage: new Emitter(), runtimeOnMessageExternal: new Emitter(),
+    permissionsOnAdded: new Emitter(), permissionsOnRemoved: new Emitter(), notificationsOnClicked: new Emitter(),
   };
+  let notificationPermission = options.notificationPermission === true;
   let nextTabId = 100;
   let nextGroupId = 500;
   const state = {
@@ -47,6 +49,12 @@ export function createFakeBrowser(options = {}) {
     contentHandlers: new Map(),
     captureResult: null,
     failures: new Map(),
+    notifications: new Map(),
+    notificationCreates: [],
+    notificationUpdates: [],
+    badgeText: "",
+    browserActionTitle: "Zamery Browser",
+    popupOpenCount: 0,
   };
 
   function addTab(tab) {
@@ -104,6 +112,51 @@ export function createFakeBrowser(options = {}) {
         },
         async set(values) { for (const [key, value] of Object.entries(values)) storage.set(key, clone(value)); },
         async remove(keys) { for (const key of [].concat(keys)) storage.delete(key); },
+      },
+    },
+    permissions: {
+      async contains(request) {
+        return request?.permissions?.includes?.("notifications") ? notificationPermission : false;
+      },
+      async request(request) {
+        if (!request?.permissions?.includes?.("notifications")) return false;
+        if (options.notificationPermissionRequestResult === false) return false;
+        notificationPermission = true;
+        await events.permissionsOnAdded.fire({ permissions: ["notifications"], origins: [] });
+        return true;
+      },
+      async remove(request) {
+        if (!request?.permissions?.includes?.("notifications")) return false;
+        const had = notificationPermission;
+        notificationPermission = false;
+        if (had) await events.permissionsOnRemoved.fire({ permissions: ["notifications"], origins: [] });
+        return had;
+      },
+      onAdded: events.permissionsOnAdded,
+      onRemoved: events.permissionsOnRemoved,
+    },
+    notifications: {
+      async create(id, options) {
+        const key = id || `notification-${state.notifications.size + 1}`;
+        state.notifications.set(key, clone(options));
+        state.notificationCreates.push({ id: key, options: clone(options) });
+        return key;
+      },
+      async update(id, options) {
+        if (!state.notifications.has(id)) return false;
+        state.notifications.set(id, { ...state.notifications.get(id), ...clone(options) });
+        state.notificationUpdates.push({ id, options: clone(options) });
+        return true;
+      },
+      async clear(id) { return state.notifications.delete(id); },
+      onClicked: events.notificationsOnClicked,
+    },
+    browserAction: {
+      async setBadgeText({ text }) { state.badgeText = text; },
+      async setTitle({ title }) { state.browserActionTitle = title; },
+      async openPopup() {
+        state.popupOpenCount += 1;
+        if (state.failures.has("browserAction.openPopup")) throw new Error(state.failures.get("browserAction.openPopup"));
       },
     },
     tabs: {

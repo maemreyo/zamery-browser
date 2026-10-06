@@ -18,28 +18,72 @@ const base = {
 const windows = [];
 after(() => { for (const window of windows) window.close(); });
 
-async function open(status, { tabs, groups = [], incognito = false } = {}) {
+async function open(status, { tabs, groups = [], incognito = false, permissionGranted = false, permissionRequestResult = true } = {}) {
   const dom = new JSDOM(HTML, { url: "moz-extension://test/popup.html", runScripts: "outside-only", pretendToBeVisual: true });
   const { window } = dom;
   windows.push(window);
   const sent = [];
+  const permissionCalls = [];
+  const tabRows = tabs ?? [
+    { id: 1, title: "Inbox", url: "https://mail.test/inbox", active: true, groupId: 4 },
+    { id: 2, title: "Settings", url: "about:preferences", active: false, groupId: -1 },
+  ];
   let current = status;
+  let notificationsPermission = permissionGranted;
   window.browser = {
-    runtime: { sendMessage: async (message) => { sent.push(message); return message.type === "zamery_browser_firefox_auth_status" ? current : { ok: true, ...current }; } },
+    runtime: { sendMessage: async (message) => {
+      sent.push(message);
+      if (message.type === "zamery_browser_firefox_auth_status") return current;
+      if (message.type === "zamery_browser_firefox_set_notifications") {
+        current = {
+          ...current,
+          notifications_preferred: message.enabled === true,
+          notifications_permission: notificationsPermission,
+          notifications_enabled: message.enabled === true && notificationsPermission,
+        };
+        return { ok: message.enabled !== true || notificationsPermission, enabled: current.notifications_enabled, permission: notificationsPermission };
+      }
+      return { ok: true, ...current };
+    } },
+    permissions: {
+      request: async (request) => {
+        permissionCalls.push({ action: "request", request });
+        if (!permissionRequestResult) return false;
+        notificationsPermission = true;
+        return true;
+      },
+      remove: async (request) => {
+        permissionCalls.push({ action: "remove", request });
+        notificationsPermission = false;
+        return true;
+      },
+    },
     windows: { getCurrent: async () => ({ id: 1, incognito }) },
-    tabs: { query: async () => tabs ?? [
-      { id: 1, title: "Inbox", url: "https://mail.test/inbox", active: true, groupId: 4 },
-      { id: 2, title: "Settings", url: "about:preferences", active: false, groupId: -1 },
-    ] },
-    tabGroups: groups ? { query: async () => groups } : undefined,
+    tabs: {
+      query: async () => tabRows,
+      get: async (id) => tabRows.find((tab) => tab.id === id) ?? null,
+    },
+    tabGroups: groups ? {
+      query: async () => groups,
+      get: async (id) => groups.find((group) => group.id === id) ?? null,
+    } : undefined,
   };
   window.eval(JS);
   await new Promise((resolve) => setTimeout(resolve, 60));
   const text = () => window.document.body.textContent.replace(/\s+/g, " ");
-  return { window, document: window.document, sent, text, set: (next) => { current = next; } };
+  return { window, document: window.document, sent, permissionCalls, text, set: (next) => { current = next; } };
 }
 
 describe("popup states", () => {
+  it("keeps notifications optional in the manifest and does not widen required permissions", () => {
+    for (const name of ["manifest.json", "manifest.development.json"]) {
+      const manifest = JSON.parse(fs.readFileSync(new URL(`../runtime/companion/${name}`, import.meta.url), "utf8"));
+      assert.deepEqual(manifest.optional_permissions, ["notifications"], name);
+      assert.ok(!manifest.permissions.includes("notifications"), name);
+      assert.deepEqual([...manifest.permissions].sort(), ["<all_urls>", "nativeMessaging", "storage", "tabGroups", "tabs"].sort(), name);
+    }
+  });
+
   it("separates connection from shared access: disconnected", async () => {
     const popup = await open({ ...base, current_host_session_id: null });
     assert.match(popup.text(), /Local bridge not connected/);
@@ -62,7 +106,7 @@ describe("popup states", () => {
     assert.match(popup.text(), /Local agent \(MCP\)/);
     assert.ok(!/Codex/i.test(popup.text()), "an unauthenticated process is never called Codex");
     assert.equal(popup.document.querySelector("#control-background").checked, false);
-    assert.ok(!popup.text().includes(base.current_host_session_id.slice(0, 8)) || popup.document.querySelector("details").textContent.includes(base.current_host_session_id.slice(0, 8)), "session id only in diagnostics");
+    assert.ok(!popup.text().includes(base.current_host_session_id.slice(0, 8)) || popup.document.querySelector("#diagnostics").textContent.includes(base.current_host_session_id.slice(0, 8)), "session id only in diagnostics");
     assert.equal(popup.document.querySelector("#grant").disabled, false);
   });
 
@@ -139,6 +183,43 @@ describe("popup states", () => {
     assert.ok(popup.sent.some((message) => message.type === "zamery_browser_firefox_resume"));
   });
 
+  it("Manage Access renders current scope and sends only reductions", async () => {
+    const popup = await open({
+      ...base,
+      state: "granted", grant_id: "grant-1", grant_revision: 3, scope_count: 2, scope_kind: "group",
+      actions: ["inspect", "interact", "capture"], duration_mode: "session", control_mode: "background",
+      control: { state: "shared_idle", reason: null, resume_requested: false },
+      scope_tabs: [
+        { tab_id: 1, origin: "https://mail.test", via_group: null },
+        { tab_id: 3, origin: "https://docs.test", via_group: "grp_123" },
+      ],
+      scope_groups: [{ handle: "grp_123", policy: "membership_snapshot", native_group_id: 4 }],
+    }, {
+      tabs: [
+        { id: 1, title: "Inbox", url: "https://mail.test/inbox", active: true, groupId: -1 },
+        { id: 3, title: "Project docs", url: "https://docs.test/one", active: false, groupId: 4 },
+      ],
+      groups: [{ id: 4, title: "Work" }],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.match(popup.text(), /Inbox/);
+    assert.match(popup.text(), /Project docs/);
+    assert.match(popup.text(), /Group: Work/);
+    assert.equal(popup.document.querySelector("#manage-reorganize").disabled, true, "Manage Access cannot add a missing capability");
+
+    popup.document.querySelector('#manage-tabs input[value="3"]').checked = false;
+    popup.document.querySelector("#manage-capture").checked = false;
+    popup.document.querySelector("#manage-background").checked = false;
+    popup.document.querySelector("#manage-save").click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const message = popup.sent.find((entry) => entry.type === "zamery_browser_firefox_manage_access");
+    assert.deepEqual({
+      tab_ids: [...message.tab_ids], group_handles: [...message.group_handles], actions: [...message.actions], control_mode: message.control_mode,
+    }, {
+      tab_ids: [1], group_handles: ["grp_123"], actions: ["inspect", "interact"], control_mode: "interactive",
+    });
+  });
+
   it("rebind: keeps the original deadline, locks duration, and explains the restart", async () => {
     const expires = Date.now() + 5 * 86_400_000;
     const popup = await open({ ...base, state: "rebind_required", reason: "restart", duration_mode: "fixed", duration_days: 7, expires_at: expires, control_mode: "background", audience_id: "aud-1", seen_audiences: [], rebind: { origins: ["https://mail.test"], count: 1 } });
@@ -191,5 +272,46 @@ describe("popup states", () => {
   it("expired access says so plainly", async () => {
     const popup = await open({ ...base, state: "expired", reason: "authorization_expired", seen_audiences: [{ audience_id: "aud-1", label: "", first_seen: 1, last_seen: 2 }] });
     assert.match(popup.text(), /Access expired/);
+  });
+
+  it("shows access attention and requests notification permission only from the user toggle", async () => {
+    const popup = await open({
+      ...base,
+      attention: { reason: "access_requested", created_at: Date.now(), expires_at: Date.now() + 60_000 },
+      seen_audiences: [{ audience_id: "aud-1", label: "MCP", first_seen: 1, last_seen: 2 }],
+      notifications_preferred: false,
+      notifications_permission: false,
+      notifications_enabled: false,
+    });
+    assert.match(popup.text(), /A local agent is waiting/);
+    assert.match(popup.text(), /Choose what to share/);
+    assert.equal(popup.permissionCalls.length, 0, "render never prompts for optional permission");
+
+    const toggle = popup.document.querySelector("#notify-attention");
+    toggle.checked = true;
+    toggle.dispatchEvent(new popup.window.Event("change"));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(popup.permissionCalls.length, 1);
+    assert.equal(popup.permissionCalls[0].action, "request");
+    assert.equal(popup.permissionCalls[0].request.permissions[0], "notifications");
+    assert.ok(popup.sent.some((message) => message.type === "zamery_browser_firefox_set_notifications" && message.enabled === true));
+    assert.equal(toggle.checked, true);
+  });
+
+  it("keeps toolbar fallback usable when Firefox denies notification permission", async () => {
+    const popup = await open({
+      ...base,
+      attention: { reason: "resume_requested", created_at: Date.now(), expires_at: Date.now() + 60_000 },
+      notifications_preferred: false,
+      notifications_permission: false,
+      notifications_enabled: false,
+    }, { permissionRequestResult: false });
+    const toggle = popup.document.querySelector("#notify-attention");
+    toggle.checked = true;
+    toggle.dispatchEvent(new popup.window.Event("change"));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(toggle.checked, false);
+    assert.match(popup.document.querySelector("#error").textContent, /Toolbar alerts still work/);
+    assert.ok(popup.sent.some((message) => message.type === "zamery_browser_firefox_set_notifications" && message.enabled === false));
   });
 });

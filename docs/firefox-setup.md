@@ -5,7 +5,7 @@
 1. the **Zamery Browser Companion** WebExtension (Mozilla-signed);
 2. a local Native Messaging host installed by `@zamery/browser-firefox`.
 
-> **Technical preview status.** The protocol-2 companion candidate `0.2.1` is Mozilla-signed, but the preview remains NO-GO until clean-machine and real authenticated-profile acceptance pass. Use only the exact signed XPI and SHA-256 recorded in the release evidence. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
+> **Technical preview status.** The accepted attention/auth UX candidate uses Mozilla-signed companion `0.2.2` (AMO version `6546104`, file `5090243`, SHA-256 `56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9`) and the matching published npm RC tuple. Signed real-profile acceptance passed on Firefox 157. The clean-machine macOS gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`); it was not passed. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
 
 ## 1. Install the native host
 
@@ -30,13 +30,15 @@ npx @zamery/browser-firefox doctor
 
 ## 4. Share tabs with an agent
 
-1. Connect an agent (for example the Codex MCP server, see [`@zamery/browser-mcp`](../packages/browser-mcp/README.md)). It appears as **Local agent** in the panel once it has called `browser_status`.
+1. Connect an agent (for example the Codex MCP server, see [`@zamery/browser-mcp`](../packages/browser-mcp/README.md)). It appears as **Local agent** in the panel once it has called `browser_status`. Before any grant exists, the agent may call `browser_request_access` to light the toolbar badge and, if you enabled it, show a generic OS notification. That request is attention only: it cannot select tabs, actions, duration, grant access, resume control or confirm a new site.
 2. Open the **Zamery Browser** toolbar panel, choose the agent, the tab(s) or tab group, what it may do, and for how long (this session, 1/3/7/14/30 days, or a custom 1–30 days). The panel shows the exact end time.
-3. Use **Take over** whenever you want to drive; the agent can only ask to resume. **Stop sharing** ends everything immediately.
+3. Use **Take over** whenever you want to drive; the agent can only ask to resume. **Manage access** can remove already-shared tabs/groups or disable capabilities in place. Adding access still requires a new explicit Share action. **Stop sharing** ends everything immediately.
 
 After Firefox, the extension or the local bridge restarts, a fixed-duration approval remains valid but you must choose the tabs again ("Share again"); nothing is restored automatically.
 
 Private windows can never be shared. Sign-in, MFA and payment fields are handed back to you.
+
+The toolbar badge is always the fallback for pending attention. OS notifications are optional and are requested only when you explicitly enable **Notify me when an agent needs me** in the popup. Notification text is generic and contains no page title, URL, form value, OTP, hand-off note or other page content. Clicking a notification only focuses Firefox and tries to open the Zamery Browser panel; it never grants, resumes or confirms anything.
 
 ## Troubleshooting
 

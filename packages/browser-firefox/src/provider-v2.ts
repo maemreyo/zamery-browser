@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   BROWSER_ARTIFACT_LIMITS_V1,
   BROWSER_ARTIFACT_PROVIDER_V1,
+  BROWSER_ATTENTION_PROVIDER_V1,
   BROWSER_AUTHORIZATION_PROVIDER_V1,
   BROWSER_CONTROL_PROVIDER_V1,
   BROWSER_CONTROL_RECEIPT_SCHEMA_V1,
@@ -21,6 +22,9 @@ import {
   type BrowserArtifactDescriptorV1,
   type BrowserArtifactProviderV1,
   type BrowserScreenshotRequestV1,
+  type BrowserAttentionProviderV1,
+  type BrowserAttentionRequestV1,
+  type BrowserAttentionResultV1,
   type BrowserAuthorizationActionV1,
   type BrowserAuthorizationDetailV1,
   type BrowserAuthorizationProviderV1,
@@ -540,6 +544,7 @@ function ownershipFor(raw: unknown): BrowserContextSummaryV2["ownership"] {
 
 export class FirefoxBrowserProviderV2 implements
   BrowserProviderV2,
+  BrowserAttentionProviderV1,
   BrowserAuthorizationProviderV1,
   BrowserControlProviderV1,
   BrowserTabProviderV1,
@@ -547,6 +552,7 @@ export class FirefoxBrowserProviderV2 implements
   BrowserArtifactProviderV1 {
   readonly tabGroupProtocolVersion = BROWSER_TAB_GROUP_PROVIDER_V1;
   readonly artifactProtocolVersion = BROWSER_ARTIFACT_PROVIDER_V1;
+  readonly attentionProtocolVersion = BROWSER_ATTENTION_PROVIDER_V1;
   readonly authorizationProtocolVersion = BROWSER_AUTHORIZATION_PROVIDER_V1;
   readonly controlProtocolVersion = BROWSER_CONTROL_PROVIDER_V1;
   readonly tabProtocolVersion = BROWSER_TAB_PROVIDER_V1;
@@ -682,6 +688,29 @@ export class FirefoxBrowserProviderV2 implements
       });
     }
     return [...byId.values()];
+  }
+
+  async requestAttention(
+    request: BrowserAttentionRequestV1,
+    options: BrowserOperationOptionsV2 = {},
+  ): Promise<BrowserAttentionResultV1> {
+    const session = this.#sessionFor(request.browserInstanceId);
+    if (!this.#sessionMatches(session, request.providerSessionId)) {
+      throw Object.assign(new Error("Firefox provider session changed"), { code: "PROVIDER_SESSION_CHANGED" });
+    }
+    const response = await sendFirefoxBrokerRequest(
+      session,
+      "request_attention",
+      { kind: request.kind },
+      { ...brokerOptions(options, this.#audienceId), readRetry: READ_RETRY },
+    );
+    const raw = (assertOk(response) ?? {}) as Record<string, unknown>;
+    const state = raw.state === "already_pending" || raw.state === "not_needed" ? raw.state : "requested";
+    return {
+      kind: "access",
+      state,
+      expiresAt: typeof raw.expires_at === "number" ? raw.expires_at : null,
+    };
   }
 
   async listContexts(

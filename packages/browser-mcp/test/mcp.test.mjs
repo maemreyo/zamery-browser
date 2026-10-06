@@ -23,13 +23,16 @@ describe("discovery works before Firefox or any grant exists", () => {
     const mcp = track(await connect({ provider: emptyProvider }));
     const { tools } = await mcp.client.listTools();
     const names = tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, ["browser_artifact_read", "browser_click", "browser_contexts", "browser_fill", "browser_group", "browser_groups", "browser_handoff", "browser_key", "browser_mutation_status", "browser_screenshot", "browser_snapshot", "browser_status", "browser_tab", "browser_type"]);
-    for (const required of ["browser_status", "browser_contexts", "browser_snapshot", "browser_click", "browser_fill", "browser_type", "browser_key", "browser_handoff", "browser_mutation_status"]) {
+    assert.deepEqual(names, ["browser_artifact_read", "browser_click", "browser_contexts", "browser_fill", "browser_group", "browser_groups", "browser_handoff", "browser_key", "browser_mutation_status", "browser_request_access", "browser_screenshot", "browser_snapshot", "browser_status", "browser_tab", "browser_type"]);
+    for (const required of ["browser_status", "browser_request_access", "browser_contexts", "browser_snapshot", "browser_click", "browser_fill", "browser_type", "browser_key", "browser_handoff", "browser_mutation_status"]) {
       assert.ok(names.includes(required), required);
     }
     assert.ok(!names.some((name) => /eval|script|execute|js|cdp|javascript/i.test(name)), "no raw JS/eval tool");
     const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool]));
     assert.equal(byName.browser_status.annotations.readOnlyHint, true);
+    assert.equal(byName.browser_request_access.annotations.readOnlyHint, false);
+    assert.equal(byName.browser_request_access.annotations.destructiveHint, false);
+    assert.equal(byName.browser_request_access.annotations.idempotentHint, true);
     assert.equal(byName.browser_contexts.annotations.readOnlyHint, true);
     assert.equal(byName.browser_click.annotations.destructiveHint, true, "a DOM click is not harmless");
     assert.equal(byName.browser_snapshot.annotations.readOnlyHint, false, "snapshot takes the write claim");
@@ -47,6 +50,18 @@ describe("discovery works before Firefox or any grant exists", () => {
     assert.ok(result.structuredContent.guidance.length > 0);
   });
 
+  it("browser_request_access fails cleanly when the provider has no attention interface", async () => {
+    const provider = {
+      protocolVersion: 2,
+      listInstances: async () => [{ browserInstanceId: "b1", providerSessionId: "s1", ownership: {} }],
+      close: async () => {},
+    };
+    const mcp = track(await connect({ provider }));
+    const result = await mcp.call("browser_request_access");
+    assert.equal(result.isError, true);
+    assert.equal(result.structuredContent.error.code, "UNSUPPORTED_CAPABILITY");
+  });
+
   it("refuses to guess between several connected profiles", async () => {
     const instances = [{ browserInstanceId: "b1", providerSessionId: "s1", ownership: {} }, { browserInstanceId: "b2", providerSessionId: "s2", ownership: {} }];
     const mcp = track(await connect({ provider: { protocolVersion: 2, listInstances: async () => instances, close: async () => {} } }));
@@ -59,6 +74,27 @@ describe("discovery works before Firefox or any grant exists", () => {
 });
 
 describe("single authorized tab vertical slice (full stack)", () => {
+  it("requests the user's attention before authorization without granting browser access", async () => {
+    const stack = track(await connectStack());
+    const request = await stack.call("browser_request_access");
+    assert.equal(request.isError, undefined, textOf(request));
+    assert.equal(request.structuredContent.kind, "access");
+    assert.equal(request.structuredContent.state, "requested");
+    assert.match(textOf(request), /user still chooses the scope/i);
+
+    const status = await stack.call("browser_status");
+    assert.equal(status.structuredContent.authorization.state, "revoked");
+    assert.equal((await stack.call("browser_contexts")).structuredContent.contexts.length, 0);
+
+    const again = await stack.call("browser_request_access");
+    assert.equal(again.structuredContent.state, "already_pending");
+
+    await stack.grant();
+    const unnecessary = await stack.call("browser_request_access");
+    assert.equal(unnecessary.structuredContent.state, "not_needed");
+    assert.match(textOf(unnecessary), /already granted/i);
+  });
+
   it("reports not-granted guidance, then shares exactly one tab and never reveals the other", async () => {
     const stack = track(await connectStack());
     const before = await stack.call("browser_status");

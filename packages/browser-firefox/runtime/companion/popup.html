@@ -40,6 +40,15 @@ code { font-size: 11px; overflow-wrap: anywhere; }
 
 <div id="error" class="error" role="alert"></div>
 
+<div id="attention-card" class="card hidden">
+  <div class="title" id="attention-title"></div>
+  <div class="sub" id="attention-detail"></div>
+</div>
+
+<section>
+  <label><input type="checkbox" id="notify-attention"> <span>Notify me when an agent needs me<br><span class="sub" id="notify-detail">Toolbar alerts still work if notifications are off.</span></span></label>
+</section>
+
 <section id="granted" class="hidden">
   <div class="card">
     <div class="pill"><span class="dot" id="control-dot"></span><span id="control-text"></span></div>
@@ -57,6 +66,27 @@ code { font-size: 11px; overflow-wrap: anywhere; }
     <div class="sub" id="shared-control-mode"></div>
     <div class="actions"><button id="share-current" type="button">Also share this tab</button><button id="revoke" type="button" class="danger">Stop sharing</button></div>
   </div>
+  <details id="manage-access">
+    <summary>Manage access</summary>
+    <div class="sub">Reduce the current grant here. Adding tabs or permissions still requires an explicit Share action.</div>
+    <h2>Shared tabs</h2>
+    <div id="manage-tabs" class="list"></div>
+    <div id="manage-groups-block" class="hidden">
+      <h2>Shared groups</h2>
+      <div id="manage-groups" class="list"></div>
+    </div>
+    <h2>Allowed actions</h2>
+    <label><input type="checkbox" checked disabled> <span>Read the page</span></label>
+    <label><input type="checkbox" id="manage-interact"> <span>Click, type and press keys</span></label>
+    <label><input type="checkbox" id="manage-capture"> <span>Take screenshots</span></label>
+    <label><input type="checkbox" id="manage-reorganize"> <span>Reorganize these tabs and groups</span></label>
+    <label><input type="checkbox" id="manage-create"> <span>Open tabs it creates itself</span></label>
+    <label><input type="checkbox" id="manage-close"> <span>Close tabs it created itself</span></label>
+    <h2>Control</h2>
+    <label><input type="checkbox" id="manage-background"> <span>Allow background control</span></label>
+    <div class="sub" id="manage-note"></div>
+    <div class="actions"><button id="manage-save" type="button" class="primary">Save reduced access</button></div>
+  </details>
   <div id="pending" class="hidden">
     <h2>Site changed</h2>
     <div id="pending-list"></div>

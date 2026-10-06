@@ -10,7 +10,7 @@ const NODE = { node_id: "n1", role: "button", name: "Go", tag: "button" };
 let sequence = 0;
 const rid = (prefix = "req") => `${prefix}-${++sequence}`;
 
-async function boot({ tabs, windows, storage, grant = true, duration, actions, controlMode, audience = AUD, sessionId } = {}) {
+async function boot({ tabs, windows, storage, grant = true, duration, actions, controlMode, audience = AUD, sessionId, notificationPermission, notificationPermissionRequestResult } = {}) {
   const company = await loadCompanion({
     tabs: tabs ?? [
       { id: 1, url: "https://a.test/page", title: "A", active: true },
@@ -18,6 +18,8 @@ async function boot({ tabs, windows, storage, grant = true, duration, actions, c
     ],
     windows,
     storage,
+    notificationPermission,
+    notificationPermissionRequestResult,
   });
   const pages = {};
   for (const tab of company.tabs.values()) {
@@ -671,6 +673,58 @@ describe("widening an active grant", () => {
   });
 });
 
+describe("manage access reductions", () => {
+  it("shrinks tabs/actions/control in place, invalidates the old claim, and refuses expansion", async () => {
+    const { company, ask } = await boot({ controlMode: "background" });
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_add_tabs", tab_ids: [2] })).ok, true);
+    const oldRef = await claimedRef(ask);
+
+    const managed = await company.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [1],
+      group_handles: [],
+      actions: ["inspect", "interact"],
+      control_mode: "interactive",
+    });
+    assert.equal(managed.ok, true, JSON.stringify(managed));
+    assert.equal(managed.changed, true);
+    assert.equal(managed.scope_count, 1);
+    assert.deepEqual([...managed.actions], ["inspect", "interact"]);
+    assert.equal(managed.control_mode, "interactive");
+    assert.equal(managed.control.state, "shared_idle");
+    assert.equal((await ask("snapshot", { context_id: "tab:2" })).error.reason, "outside_scope");
+
+    const stale = await ask("act", { context_id: "tab:1", ref: oldRef, action: "click" });
+    assert.equal(stale.ok, false);
+    assert.ok(["claim_required", "claim_changed"].includes(stale.error.reason), JSON.stringify(stale));
+
+    const expandAction = await company.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [1], group_handles: [], actions: ["inspect", "interact", "capture"], control_mode: "interactive",
+    });
+    assert.equal(expandAction.ok, false);
+    assert.equal(expandAction.error, "manage_access_cannot_expand");
+    const expandControl = await company.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [1], group_handles: [], actions: ["inspect", "interact"], control_mode: "background",
+    });
+    assert.equal(expandControl.ok, false);
+    assert.equal(expandControl.error, "manage_access_cannot_expand");
+
+    assert.equal(await company.nonPopup({ type: "zamery_browser_firefox_manage_access", tab_ids: [] }), undefined, "agent/non-popup callers cannot manage access");
+  });
+
+  it("removing the final shared tab ends authority", async () => {
+    const { company, ask } = await boot();
+    const result = await company.popup({
+      type: "zamery_browser_firefox_manage_access", tab_ids: [], group_handles: [], actions: ["inspect"], control_mode: "interactive",
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.state, "revoked");
+    assert.equal((await ask("list_contexts")).error.code, "BROWSER_AUTHORIZATION_REQUIRED");
+  });
+});
+
 describe("review regressions", () => {
   it("does not remember a refused (not_started) mutation, so the same id can be retried after re-sharing", async () => {
     const { company, ask } = await boot();
@@ -723,5 +777,145 @@ describe("review regressions", () => {
     assert.equal(status.handoff_note, "Please enter the 2FA code");
     const consumerView = await company.nonPopup({ type: "zamery_browser_firefox_auth_status" });
     assert.equal(consumerView.handoff_note, undefined);
+  });
+});
+
+describe("attention and access requests", () => {
+  it("requests access before authorization without granting or exposing scope, dedupes, and clears after Share", async () => {
+    const { company, ask } = await boot({ grant: false, notificationPermission: true });
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_set_notifications", enabled: true })).ok, true);
+
+    const first = await ask("request_attention", { kind: "access" });
+    assert.equal(first.ok, true, JSON.stringify(first));
+    assert.equal(first.result.state, "requested");
+    await settle(20);
+    assert.equal(company.state.badgeText, "?");
+    assert.equal(company.state.notificationCreates.length, 1);
+    const notification = JSON.stringify(company.state.notificationCreates[0]);
+    assert.match(notification, /local agent/i);
+    assert.ok(!notification.includes("a.test"));
+    assert.ok(!notification.includes("b.test"));
+
+    const status = await ask("status");
+    assert.equal(status.result.authorization.state, "revoked");
+    assert.equal(status.result.authorization.scope_count, 0);
+
+    const second = await ask("request_attention", { kind: "access" });
+    assert.equal(second.result.state, "already_pending");
+    await settle(20);
+    assert.equal(company.state.notificationCreates.length, 1, "same logical request does not notify again");
+    assert.equal(company.state.notificationUpdates.length, 0, "dedupe does not refresh the OS notification");
+
+    const unsafe = await ask("request_attention", { kind: "access", tab_id: 1 });
+    assert.equal(unsafe.ok, false);
+    assert.equal(unsafe.error.code, "INVALID_ARGUMENT");
+    assert.equal((await ask("snapshot", { context_id: "tab:1" })).error.code, "BROWSER_AUTHORIZATION_REQUIRED");
+
+    const granted = await company.popup({ type: "zamery_browser_firefox_grant", tab_ids: [1], audience_id: AUD });
+    assert.equal(granted.ok, true, JSON.stringify(granted));
+    await settle(20);
+    assert.equal(company.state.badgeText, "");
+    assert.equal(company.state.notifications.size, 0);
+
+    const unnecessary = await ask("request_attention", { kind: "access" });
+    assert.equal(unnecessary.result.state, "not_needed");
+    await settle(20);
+    assert.equal(company.state.badgeText, "");
+    assert.equal(company.state.notificationCreates.length, 1, "an already-authorized agent does not alert the user again");
+  });
+
+  it("does not surface restart/rebind until a real consumer waits, and never surfaces a diagnostic probe", async () => {
+    const first = await boot({ duration: { mode: "fixed", days: 3 }, notificationPermission: true });
+    assert.equal((await first.company.popup({ type: "zamery_browser_firefox_set_notifications", enabled: true })).ok, true);
+    const stored = Object.fromEntries(first.company.storage);
+
+    const second = await loadCompanion({
+      tabs: [{ id: 1, url: "https://a.test/page", title: "A", active: true }],
+      storage: stored,
+      notificationPermission: true,
+    });
+    second.state.contentHandlers.set(1, pageScript({ snapshotNodes: [NODE] }).handler);
+    await second.hostStatus();
+    await settle(20);
+    assert.equal(second.state.badgeText, "");
+    assert.equal(second.state.notificationCreates.length, 0);
+
+    const probe = await second.request({ id: rid("probe"), op: "status", audience_id: "doctor-probe", params: { probe: true } });
+    assert.equal(probe.result.authorization.state, "rebind_required");
+    await settle(20);
+    assert.equal(second.state.badgeText, "");
+    assert.equal(second.state.notificationCreates.length, 0);
+
+    await second.request({ id: rid("consumer"), op: "status", audience_id: AUD, params: { client_label: "Test agent" } });
+    await settle(20);
+    assert.equal(second.state.badgeText, "↻");
+    assert.equal(second.state.notificationCreates.length, 1);
+    const popup = await second.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(popup.attention.reason, "rebind_required");
+  });
+
+  it("surfaces takeover, resume, credential and origin attention without leaking handoff or page data", async () => {
+    const { company, ask } = await boot({ notificationPermission: true });
+    await company.popup({ type: "zamery_browser_firefox_set_notifications", enabled: true });
+    await ask("control_claim", { context_id: "tab:1" });
+
+    await ask("control_takeover", { note: "Enter secret 123456 on https://private.test" });
+    await settle(20);
+    let popup = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(popup.attention.reason, "user_action_required");
+    assert.equal(company.state.badgeText, "!");
+    assert.ok(!JSON.stringify([...company.state.notifications.values()]).includes("123456"));
+    assert.ok(!JSON.stringify([...company.state.notifications.values()]).includes("private.test"));
+
+    await ask("control_request_resume");
+    popup = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(popup.attention.reason, "resume_requested");
+    assert.equal(popup.control.resume_requested, true);
+    await company.popup({ type: "zamery_browser_firefox_resume" });
+    await settle(20);
+    assert.equal(company.state.badgeText, "");
+
+    await ask("control_claim", { context_id: "tab:1" });
+    company.state.contentHandlers.set(1, async (message) => {
+      if (message.type === "zamery_browser_firefox_ping") return { document_id: "doc-c", url: "https://a.test/page", title: "A", interaction_generation: 0 };
+      if (message.type === "zamery_browser_firefox_snapshot") return { document_id: "doc-c", url: "https://a.test/page", title: "A", interaction_generation: 0, nodes: [NODE] };
+      if (message.type === "zamery_browser_firefox_act") return { error: { code: "USER_TAKEOVER_REQUIRED", reason: "credential_field" } };
+      return undefined;
+    });
+    const snap = await ask("snapshot", { context_id: "tab:1" });
+    const credential = await ask("act", { context_id: "tab:1", ref: refOf(snap), action: "click" });
+    assert.equal(credential.result.outcome, "not_started");
+    popup = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(popup.attention.reason, "credential_field");
+
+    await company.popup({ type: "zamery_browser_firefox_resume" });
+    await ask("control_claim", { context_id: "tab:1" });
+    await company.browser.tabs.update(1, { url: "https://evil.test/login" });
+    await settle(20);
+    popup = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(popup.attention.reason, "origin_confirmation_required");
+    assert.ok(!JSON.stringify([...company.state.notifications.values()]).includes("evil.test"));
+    await company.popup({ type: "zamery_browser_firefox_confirm_origin", tab_id: 1 });
+    await settle(20);
+    assert.equal(company.state.badgeText, "");
+  });
+
+  it("notification click only brings the user to Firefox UI and keeps badge fallback when openPopup fails", async () => {
+    const { company, ask } = await boot({ grant: false, notificationPermission: true });
+    await company.popup({ type: "zamery_browser_firefox_set_notifications", enabled: true });
+    await ask("request_attention", { kind: "access" });
+    await settle(20);
+    assert.equal(company.state.badgeText, "?");
+
+    await company.events.notificationsOnClicked.fire("zamery-browser-attention");
+    await settle(20);
+    assert.equal(company.state.popupOpenCount, 1);
+    assert.equal((await ask("snapshot", { context_id: "tab:1" })).error.code, "BROWSER_AUTHORIZATION_REQUIRED");
+
+    company.state.failures.set("browserAction.openPopup", "not allowed here");
+    await company.events.notificationsOnClicked.fire("zamery-browser-attention");
+    await settle(20);
+    assert.equal(company.state.popupOpenCount, 2);
+    assert.equal(company.state.badgeText, "?", "badge remains the fallback");
   });
 });

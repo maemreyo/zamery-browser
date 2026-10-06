@@ -29,6 +29,24 @@ async function grant(stack, extra = {}) {
 }
 
 describe("BrowserProvider V2 over the real broker, host and companion", () => {
+  it("requests bounded pre-auth attention without creating authority", async () => {
+    const { stack, provider, target } = await boot();
+    const first = await provider.requestAttention({ ...target, kind: "access" });
+    assert.equal(first.kind, "access");
+    assert.equal(first.state, "requested");
+    assert.ok(first.expiresAt > Date.now());
+    assert.equal((await provider.authorizationDetail(target)).state, "revoked");
+
+    const second = await provider.requestAttention({ ...target, kind: "access" });
+    assert.equal(second.state, "already_pending");
+    assert.deepEqual(await provider.listContexts(target).catch((error) => error.reason), "current_host_session_not_granted");
+
+    await grant(stack);
+    const unnecessary = await provider.requestAttention({ ...target, kind: "access" });
+    assert.equal(unnecessary.state, "not_needed");
+    assert.equal(unnecessary.expiresAt, null);
+  });
+
   it("walks the single-tab hero path: inspect -> claim -> act -> takeover -> resume, with a second tab invisible", async () => {
     const { stack, provider, target } = await boot();
     const before = await provider.authorizationDetail(target);

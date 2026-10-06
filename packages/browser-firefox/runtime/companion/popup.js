@@ -25,6 +25,15 @@ const REASONS = {
   authorized_tabs_closed: "The shared tabs were closed.",
 };
 
+const ATTENTION = {
+  access_requested: ["A local agent is waiting", "Choose what to share, then press Share selected."],
+  rebind_required: ["Share again", "A local agent is waiting for you to choose the tabs again."],
+  user_action_required: ["Agent needs your input", "Finish the requested step here, then resume when you are ready."],
+  credential_field: ["Sign-in needs you", "Enter the sign-in, code or payment information yourself."],
+  resume_requested: ["Agent is ready to continue", "Only you can resume the agent."],
+  origin_confirmation_required: ["A shared tab changed site", "Review the new site before sharing it with the agent."],
+};
+
 function reasonText(reason) {
   return reason ? REASONS[reason] || "" : "";
 }
@@ -106,6 +115,70 @@ function renderControl(status) {
   $("#resume").classList.toggle("hidden", control.state !== "user_control");
 }
 
+function renderAttention(status) {
+  const card = $("#attention-card");
+  const copy = status.attention?.reason ? ATTENTION[status.attention.reason] : null;
+  card.classList.toggle("hidden", !copy);
+  $("#attention-title").textContent = copy?.[0] || "";
+  $("#attention-detail").textContent = copy?.[1] || "";
+
+  const toggle = $("#notify-attention");
+  const supported = typeof browser.permissions?.request === "function";
+  toggle.disabled = !supported;
+  toggle.checked = status.notifications_enabled === true;
+  if (!supported) $("#notify-detail").textContent = "OS notifications are unavailable here. Toolbar alerts still work.";
+  else if (status.notifications_preferred && !status.notifications_permission) $("#notify-detail").textContent = "Firefox notification permission is off. Toolbar alerts still work.";
+  else $("#notify-detail").textContent = "Toolbar alerts still work if notifications are off.";
+}
+
+async function renderManageAccess(status) {
+  const revision = `${status.grant_id || ""}:${status.grant_revision || 0}`;
+  const tabsList = $("#manage-tabs");
+  const groupsList = $("#manage-groups");
+  if (tabsList.dataset.revision === revision && groupsList.dataset.revision === revision) return;
+  tabsList.dataset.revision = revision;
+  groupsList.dataset.revision = revision;
+
+  const tabRows = await Promise.all((status.scope_tabs || []).map(async (entry) => {
+    const tab = await browser.tabs.get?.(entry.tab_id).catch(() => null);
+    const input = element("input", { type: "checkbox", value: String(entry.tab_id), id: `manage-tab-${entry.tab_id}` });
+    input.checked = true;
+    return element("label", { for: input.id }, input, element("span", {},
+      element("div", { class: "title", text: tab?.title || hostnameOf(entry.origin) || `Tab ${entry.tab_id}` }),
+      element("div", { class: "sub", text: `${hostnameOf(entry.origin) || "Shared web page"}${entry.via_group ? " · shared through a group" : ""}` }),
+    ));
+  }));
+  if (lastStatus?.grant_id !== status.grant_id || lastStatus?.grant_revision !== status.grant_revision) return;
+  tabsList.replaceChildren(...tabRows);
+
+  const groupRows = await Promise.all((status.scope_groups || []).map(async (entry) => {
+    const group = Number.isInteger(entry.native_group_id) ? await browser.tabGroups?.get?.(entry.native_group_id).catch(() => null) : null;
+    const input = element("input", { type: "checkbox", value: entry.handle, id: `manage-group-${entry.handle}` });
+    input.checked = true;
+    return element("label", { for: input.id }, input, element("span", {},
+      element("div", { class: "title", text: `Group: ${group?.title || "(untitled)"}` }),
+      element("div", { class: "sub", text: entry.policy === "follow_group" ? "Follows new human-added tabs" : "Membership snapshot" }),
+    ));
+  }));
+  if (lastStatus?.grant_id !== status.grant_id || lastStatus?.grant_revision !== status.grant_revision) return;
+  groupsList.replaceChildren(...groupRows);
+  $("#manage-groups-block").classList.toggle("hidden", groupRows.length === 0);
+
+  const actions = new Set(status.actions || []);
+  for (const [id, action] of [
+    ["#manage-interact", "interact"], ["#manage-capture", "capture"], ["#manage-reorganize", "reorganize"],
+    ["#manage-create", "create_tab"], ["#manage-close", "close_owned_tab"],
+  ]) {
+    const input = $(id);
+    input.checked = actions.has(action);
+    input.disabled = !actions.has(action);
+  }
+  $("#manage-background").checked = status.control_mode === "background";
+  $("#manage-background").disabled = status.control_mode !== "background";
+  $("#manage-note").textContent = "Saving only reduces access. Removed permissions require a new explicit Share action to restore.";
+  $("#manage-save").disabled = busy;
+}
+
 function renderGranted(status) {
   $("#granted").classList.remove("hidden");
   renderControl(status);
@@ -120,6 +193,7 @@ function renderGranted(status) {
   $("#shared-control-mode").textContent = status.control_mode === "background"
     ? "Background control: on — shared tabs may be controlled without bringing them to the front."
     : "Background control: off — writes require the shared tab to be in front.";
+  void renderManageAccess(status);
 
   const pending = status.pending_origin_changes || {};
   const ids = Object.keys(pending);
@@ -265,6 +339,7 @@ function updateDurationUi(status, rebinding) {
 function render(status) {
   lastStatus = status;
   const ready = renderConnection(status);
+  renderAttention(status);
   $("#granted").classList.add("hidden");
   $("#picker").classList.add("hidden");
   $("#error").textContent = "";
@@ -325,6 +400,7 @@ const ERRORS = {
   no_pending_origin_change: "Nothing to confirm.",
   not_granted: "Sharing is not on.",
   tab_not_shareable: "That page can't be shared.",
+  manage_access_cannot_expand: "Manage access can only reduce the current grant. Use an explicit Share action to add access.",
 };
 
 function errorText(code) {
@@ -336,6 +412,26 @@ $("#custom-days").addEventListener("input", () => updateDurationUi(lastStatus, l
 $("#agent").addEventListener("change", () => { $("#grant").disabled = !$("#agent").value; });
 $("#clock-confirm").addEventListener("change", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
 $("#control-background").addEventListener("change", () => { pickerDirty = true; });
+
+$("#notify-attention").addEventListener("change", async () => {
+  const toggle = $("#notify-attention");
+  const requested = toggle.checked;
+  let granted = false;
+  let failure = "";
+  try {
+    if (requested) granted = await browser.permissions.request({ permissions: ["notifications"] });
+    else {
+      await browser.permissions.remove?.({ permissions: ["notifications"] });
+      granted = false;
+    }
+    const result = await send({ type: "zamery_browser_firefox_set_notifications", enabled: requested && granted });
+    if (requested && (!granted || result?.ok === false)) failure = "Firefox did not enable OS notifications. Toolbar alerts still work.";
+  } catch (error) {
+    failure = "Firefox did not enable OS notifications. Toolbar alerts still work.";
+  }
+  await refresh();
+  if (failure) $("#error").textContent = failure;
+});
 
 $("#grant").addEventListener("click", () => {
   const tabIds = [...$("#tabs").querySelectorAll("input:checked")].map((input) => Number(input.value));
@@ -361,6 +457,21 @@ $("#share-current").addEventListener("click", async () => {
   const current = await browser.windows.getCurrent().catch(() => null);
   const active = current ? await browser.tabs.query({ windowId: current.id, active: true }) : [];
   if (active[0]) void act({ type: "zamery_browser_firefox_add_tabs", tab_ids: [active[0].id] });
+});
+$("#manage-save").addEventListener("click", () => {
+  const actions = ["inspect"];
+  if ($("#manage-interact").checked) actions.push("interact");
+  if ($("#manage-capture").checked) actions.push("capture");
+  if ($("#manage-reorganize").checked) actions.push("reorganize");
+  if ($("#manage-create").checked) actions.push("create_tab");
+  if ($("#manage-close").checked) actions.push("close_owned_tab");
+  void act({
+    type: "zamery_browser_firefox_manage_access",
+    tab_ids: [...$("#manage-tabs").querySelectorAll("input:checked")].map((input) => Number(input.value)),
+    group_handles: [...$("#manage-groups").querySelectorAll("input:checked")].map((input) => input.value),
+    actions,
+    control_mode: $("#manage-background").checked ? "background" : "interactive",
+  });
 });
 $("#revoke").addEventListener("click", () => void act({ type: "zamery_browser_firefox_revoke" }));
 $("#takeover").addEventListener("click", () => void act({ type: "zamery_browser_firefox_takeover" }));
