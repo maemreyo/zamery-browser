@@ -1,6 +1,6 @@
 {
   "name": "@zamery/browser-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Standalone MCP server that lets a local agent use a user's already-running Firefox through the Zamery BrowserProvider V2 contracts.",
   "keywords": ["mcp", "model-context-protocol", "ai-agents", "browser-automation", "firefox", "codex"],
@@ -48,5 +48,6 @@
   "license": "Apache-2.0",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "mcpName": "io.github.maemreyo/zamery-browser"
 }

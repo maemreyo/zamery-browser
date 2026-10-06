@@ -111,4 +111,35 @@ jobs:
           publish_one '@zamery/browser-provider' '0.2.3' 'zamery-browser-provider-*.tgz'
           publish_one '@zamery/pi-browser' '0.2.2' 'zamery-pi-browser-*.tgz'
           publish_one '@zamery/browser-firefox' '0.2.2' 'zamery-browser-firefox-*.tgz'
-          publish_one '@zamery/browser-mcp' '0.1.1' 'zamery-browser-mcp-*.tgz'
+          publish_one '@zamery/browser-mcp' '0.1.2' 'zamery-browser-mcp-*.tgz'
+
+      - name: Validate MCP Registry metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'const p=require("./packages/browser-mcp/package.json"); const s=require("./server.json"); const n=s.packages.find((x)=>x.registryType==="npm"&&x.identifier===p.name); if(p.mcpName!==s.name||p.version!==s.version||!n||n.version!==p.version){throw new Error("MCP Registry metadata does not match package")}'
+          test "$(node -p 'require("./server.json").description.length')" -le 100
+
+      - name: Install MCP Registry publisher
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" |
+            tar xz -C "$RUNNER_TEMP" mcp-publisher
+          "$RUNNER_TEMP/mcp-publisher" --help >/dev/null
+
+      - name: Publish Official MCP Registry metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/mcp-publisher" validate server.json
+          server_name="$(node -p 'require("./server.json").name')"
+          server_version="$(node -p 'require("./server.json").version')"
+          encoded_name="$(node -p 'encodeURIComponent(require("./server.json").name)')"
+          if curl -fsSL "https://registry.modelcontextprotocol.io/v0.1/servers?search=$encoded_name" |
+            jq -e --arg name "$server_name" --arg version "$server_version" '.servers[]? | select(.server.name == $name and .server.version == $version)' >/dev/null; then
+            echo "$server_name@$server_version already exists in the Official MCP Registry; skipping publish"
+            exit 0
+          fi
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish server.json
