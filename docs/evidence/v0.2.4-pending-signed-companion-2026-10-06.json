@@ -31,6 +31,7 @@
     "concurrent_action_screenshot_overlay_pixels": 0,
     "amo_prepare": "PASS; candidate 0.2.6; source SHA-256 b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9",
     "github_pr": 41,
+    "pending_evidence_pr": 42,
     "github_ci_run_id": 37477883438,
     "github_ci": "PASS"
   },
