@@ -512,13 +512,34 @@ describe("human <-> agent control", () => {
     assert.equal(pages[4].acts.length, 0);
   });
 
-  it("background control still hands over when the user touches the claimed tab", async () => {
+  it("background control invalidates stale refs without forcing Resume when the user touches the claimed tab", async () => {
+    const { company, pages, ask } = await boot({ controlMode: "background" });
+    const ref = await claimedRef(ask);
+    pages[1].interactionGeneration += 1;
+    await company.nonPopup({ type: "zamery_browser_firefox_interaction" }, { id: "zamery-browser-firefox@zamery.local", tab: { id: 1 } });
+    const status = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(status.control.state, "agent_claimed");
+    assert.equal(status.control.reason, null);
+
+    const stale = await ask("act", { context_id: "tab:1", ref, action: "click" });
+    assert.equal(stale.error.reason, "user_interaction");
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.state, "agent_claimed");
+
+    const fresh = await claimedRef(ask);
+    assert.equal((await ask("act", { context_id: "tab:1", ref: fresh, action: "click" })).ok, true);
+  });
+
+  it("background control keeps a claim across same-origin manual navigation but requires a fresh observation", async () => {
     const { company, ask } = await boot({ controlMode: "background" });
     const ref = await claimedRef(ask);
-    await company.nonPopup({ type: "zamery_browser_firefox_interaction" }, { id: "zamery-browser-firefox@zamery.local", tab: { id: 1 } });
-    const blocked = await ask("act", { context_id: "tab:1", ref, action: "click" });
-    assert.equal(blocked.error.reason, "user_control");
-    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.reason, "human_interaction");
+    company.tabs.get(1).url = "https://a.test/typed-in-urlbar";
+    await company.events.tabsOnUpdated.fire(1, { url: "https://a.test/typed-in-urlbar" }, company.tabs.get(1));
+    const status = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(status.control.state, "agent_claimed");
+    assert.equal(status.control.reason, null);
+    assert.equal((await ask("act", { context_id: "tab:1", ref, action: "click" })).error.reason, "page_navigated");
+    const fresh = await claimedRef(ask);
+    assert.equal((await ask("act", { context_id: "tab:1", ref: fresh, action: "click" })).ok, true);
   });
 
   it("background control keeps credential refusal and origin confirmation fail-closed", async () => {

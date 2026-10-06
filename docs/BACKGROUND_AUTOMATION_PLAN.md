@@ -26,7 +26,7 @@ Background mode does **not** weaken the existing authority boundaries. Revoke/ex
   - `interactive` → require focused active target exactly as today.
   - `background` → require the exact claimed context to remain authorized/live; do not activate/focus it.
 - A user's tab switch/window switch only triggers takeover for an `interactive` claim. In `background`, activity in another tab/window does not stop the worker.
-- Human interaction/navigation inside the claimed background tab still invalidates the observation and hands control to the user.
+- Human interaction or same-origin navigation inside the claimed background tab invalidates the old observation, but does not force a persistent handoff. The agent must take a fresh snapshot before its next write. Cross-origin navigation still requires user confirmation.
 
 ### 3. Preserve hard handoff boundaries
 
@@ -72,10 +72,10 @@ Implemented on `codex/background-automation` with two explicit modes carried thr
 - `interactive` remains the default for new, legacy and unknown grants; focused-tab behavior is unchanged.
 - `background` is explicit opt-in and remains bound to the exact shared/claimed context. It does not activate the tab, steal focus, or retarget to an unrelated foreground tab.
 - Rebind preserves the original control mode.
-- Trusted interaction on the claimed tab, manual navigation/origin changes, credentials/OTP/payment-like fields, Take over, revoke/expiry/rebind, stale refs/documents and unknown mutation outcomes remain fail-closed.
+- Trusted interaction and same-origin manual navigation on the claimed tab make old observations stale without requiring Resume. Cross-origin changes, credentials/OTP/payment-like fields, explicit Take over, revoke/expiry/rebind, stale refs/documents and unknown mutation outcomes remain fail-closed.
 
 Focused automated verification passed: `@zamery/browser-firefox` 197/197 tests and `@zamery/browser-mcp` 21/21 tests, with `@zamery/browser-provider` built first so downstream packages consumed the current contract.
 
-Real-Firefox acceptance also passed in the repository's isolated companion/profile harness: 24/24 tests on Firefox 157.0. The background hero scenario proved that a shared tab can be filled/clicked while another tab stays active, the foreground tab is not retargeted or focused away, Take over/Resume/revoke remain authoritative, credential writes are refused before dispatch, cross-origin navigation requires confirmation, and trusted human input on the claimed tab still takes control. Durable evidence: `docs/evidence/live-firefox-background-2026-10-06.json`.
+The original real-Firefox acceptance passed 24/24 tests on Firefox 157.0 and is preserved as historical evidence in `docs/evidence/live-firefox-background-2026-10-06.json`. A follow-up real-Firefox acceptance for cooperative background control also passed: trusted human key and click events made old observations stale while the background claim stayed active, and the agent continued from a fresh snapshot without Resume. Explicit Take over/Resume/revoke, credential refusal and cross-origin confirmation remain separate hard boundaries.
 
 The companion source version is now `0.2.1`. The previously signed `0.2.0` XPI is evidence only for the earlier source tuple and must not be used as signed/source-compatibility evidence for this implementation. No `0.2.1` XPI was signed or published in this slice; clean-machine and authenticated-user-profile acceptance for a new release candidate remain release-gate work.

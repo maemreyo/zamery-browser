@@ -19,7 +19,7 @@ import {
 } from "./provider-loader.js";
 
 export const PI_BROWSER_EXTENSION_NAME = "@zamery/pi-browser";
-export const PI_BROWSER_EXTENSION_VERSION = "0.1.0";
+export const PI_BROWSER_EXTENSION_VERSION = "0.2.2";
 export const PI_BROWSER_EXTENSION_ID = `${PI_BROWSER_EXTENSION_NAME}@${PI_BROWSER_EXTENSION_VERSION}`;
 
 export const BROWSER_STATUS_TOOL = "browser_status";
