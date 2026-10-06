@@ -1,0 +1,64 @@
+{
+  "at": "2026-10-06T02:26:50Z",
+  "candidate": {
+    "browser_provider": "0.2.2-rc.2",
+    "browser_firefox": "0.2.1-rc.2",
+    "browser_mcp": "0.1.0-rc.3",
+    "companion": "0.2.1",
+    "signed_xpi_sha256": "06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "environment": {
+    "firefox": "157.0",
+    "profile": "default-release",
+    "node": "24.19.0",
+    "companion_installed": true,
+    "companion_signed": true,
+    "protocol_compatible": true
+  },
+  "checks": [
+    {
+      "name": "signed-upgrade-rebind",
+      "result": "PASS",
+      "observation": "After installing signed companion 0.2.1, the existing grant moved to rebind_required and recovered only after the user explicitly shared tabs again."
+    },
+    {
+      "name": "bounded-real-profile-scope",
+      "result": "PASS",
+      "shared_tabs": 2,
+      "shared_origin": "https://learning.zamery-center.workers.dev",
+      "observation": "browser_contexts exposed only the two Zamery Center tabs selected by the user."
+    },
+    {
+      "name": "existing-authenticated-session",
+      "result": "PASS",
+      "observation": "The already-authenticated teacher surface was readable through the signed companion without relaunching the Firefox profile or exporting cookies."
+    },
+    {
+      "name": "outside-scope-denial",
+      "result": "PASS",
+      "error_code": "BROWSER_AUTHORIZATION_REQUIRED",
+      "reason": "outside_scope",
+      "observation": "A direct snapshot request for a previously known but no-longer-shared tab was denied and its content was not returned."
+    },
+    {
+      "name": "snapshot-privacy",
+      "result": "PASS",
+      "values_exported": false,
+      "hidden_controls_excluded": true,
+      "top_frame_only": true
+    },
+    {
+      "name": "published-package-doctor",
+      "result": "PASS",
+      "command": "npx -y @zamery/browser-firefox@0.2.1-rc.2 doctor --json",
+      "host_manifest": "OK",
+      "host_launcher": "OK",
+      "host_copy_matches_package": true,
+      "installed_companion": "0.2.1",
+      "installed_companion_signed": true
+    }
+  ],
+  "verdict": "PASS"
+}
