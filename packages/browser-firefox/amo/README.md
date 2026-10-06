@@ -2,7 +2,7 @@
 
 This directory contains the metadata and release checklist for the public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current public AMO version: `0.2.5` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It is public at https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/ (AMO version `6547131`, file `5091270`). The accepted XPI SHA-256 is `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; the matching production-source SHA-256 is `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`.
+Current public AMO version: `0.2.6` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It is public at https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/ (AMO version `6548018`, file `5092157`). The accepted XPI SHA-256 is `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`; the matching production-source SHA-256 is `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`.
 
 ## Version history relevant to this release
 
@@ -69,4 +69,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Companion `0.2.5` remains the accepted browser artifact for stable Zamery Browser `v0.2.3`. Companion `0.2.6` passes the source gate (`pnpm verify`, live Firefox 31/31, AMO lint 0 errors / 0 warnings / 0 notices), exact signed-XPI/source verification, and signed real-profile acceptance. Its production-source SHA-256 is `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`; signed XPI SHA-256 is `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`. Stable `v0.2.4` promotion still requires the published npm tuple and clean-distribution acceptance.
+Companion `0.2.6` is the accepted browser artifact for stable Zamery Browser `v0.2.4`. It passes the source gate (`pnpm verify`, live Firefox 31/31, AMO lint 0 errors / 0 warnings / 0 notices), exact signed-XPI/source verification, signed real-profile acceptance, and clean-distribution acceptance. Production-source SHA-256 is `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`; signed XPI SHA-256 is `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`.

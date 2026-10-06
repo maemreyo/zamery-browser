@@ -4,11 +4,11 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Stable `v0.2.3` accepted.** npm `latest` is `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`; companion `0.2.5` is Mozilla-signed/public on AMO and source-compatible with the accepted tree. The exact signed XPI/source tuple is verified. Signed real-profile cooperative-background acceptance passed on Firefox 157: an OS-level trusted input produced `INPUT-true`, invalidated the old observation with `STALE_ELEMENT_REF / user_interaction`, kept control `agent_claimed`, and a fresh snapshot continued without Resume. Clean published-artifact acceptance passed for the final tuple. Durable evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
+**Stable `v0.2.4` accepted.** npm `latest` is `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.3`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`; companion `0.2.6` is Mozilla-signed/public on AMO. Exact signed-XPI/source verification, signed real-profile authorization/snapshot/write/capture, and clean published-artifact acceptance all pass. Clean distribution run: `37500599757`. Durable evidence: `docs/evidence/stable-release-v0.2.4-2026-10-07.json`.
 
 Companion `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. AMO version `6547131`, file `5091270`, XPI SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; `pnpm release:tuple --xpi` verifies Mozilla signature presence and exact source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. Candidate evidence is in `docs/evidence/v0.2.3-signed-companion-2026-10-06.json`.
 
-Post-stable release candidate `v0.2.4` keeps provider/MCP/Pi versions unchanged, bumps `@zamery/browser-firefox` to `0.2.3`, and uses Mozilla-signed/public Companion `0.2.6`. It adds advisory exact-target agent action cues and screenshot suppression without changing BrowserProvider V2 or native wire protocol 2. The candidate passes `@zamery/browser-firefox` 232/232, the full `pnpm verify` gate, live Firefox 157 acceptance 31/31, and AMO lint with 0 errors / 0 warnings / 0 notices. The exact signed XPI/source tuple is verified: AMO version `6548018`, file `5092157`, XPI SHA-256 `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`, source SHA-256 `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`. Signed `default-release` profile acceptance also passes for authorization, snapshot, a benign write, and screenshot capture. Durable signed-candidate evidence: `docs/evidence/v0.2.4-signed-companion-2026-10-06.json`.
+`v0.2.4` adds advisory exact-target agent action cues and screenshot suppression without changing BrowserProvider V2 or native wire protocol 2. It passes `@zamery/browser-firefox` 232/232, the full `pnpm verify` gate, live Firefox 157 acceptance 31/31, AMO lint with 0 errors / 0 warnings / 0 notices, signed real-profile acceptance, and clean distribution. The exact signed XPI/source tuple is AMO version `6548018`, file `5092157`, XPI SHA-256 `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`, source SHA-256 `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`.
 
 ## What exists (by layer)
 
@@ -21,13 +21,13 @@ Post-stable release candidate `v0.2.4` keeps provider/MCP/Pi versions unchanged,
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
 | **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; current post-stable candidate passes 31/31, including background control plus overlay/pixel suppression acceptance. Evidence: `docs/evidence/live-firefox-agent-action-overlay-2026-10-06.json` |
-| **Real authenticated Firefox profile** | Signed companion `0.2.5` on `default-release`; explicit rebind after update preserved the fixed-duration approval; OS-level trusted input on an agent-owned localhost tab produced `INPUT-true`, invalidated the stale observation, kept background control `agent_claimed`, and allowed a fresh snapshot without Resume. Earlier attention/auth scope-reduction behavior remains evidenced by `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
-| Packaging | Final npm tuple installed without a repository checkout on a clean GitHub-hosted macOS runner; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Final run id is recorded in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. |
+| **Real authenticated Firefox profile** | Signed companion `0.2.6` on `default-release`; explicit sharing produced a fixed 30-day background grant over five tabs, and snapshot, benign write and screenshot capture passed. Earlier attention/auth scope-reduction behavior remains evidenced by `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
+| Packaging | Final `v0.2.4` npm tuple installed without a repository checkout on a clean GitHub-hosted macOS runner; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Run `37500599757`. |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
 
-The stable `0.2.5` source remains accepted for `v0.2.3`. Companion `0.2.6` separately passes the combined 31/31 live suite, source preflight, exact signed-XPI/source verification and signed real-profile acceptance. Clean distribution of the final `v0.2.4` npm/XPI tuple remains open.
+Companion `0.2.6` passes the combined 31/31 live suite, source preflight, exact signed-XPI/source verification, signed real-profile acceptance, and clean distribution with the final `v0.2.4` npm/XPI tuple.
 
 ## Acceptance matrix (section 18 of the validation review)
 
@@ -35,8 +35,8 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
-| 1 | Clean macOS distribution install from published pinned packages + signed XPI verification | ✅ | Final `v0.2.3` tuple installed without repository checkout on a clean GitHub-hosted macOS runner; dependency tree, imports, Codex recipe, signed XPI SHA/signature, native-host setup and doctor all passed. Run `37462724579`. This runner did not perform an authenticated live companion session; real signed-browser behavior is evidenced separately in row 2. |
-| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.5` runs on the user's `default-release` profile. Rebind after the signed update preserved approval semantics; previous shrink-only scope acceptance remains valid and is supplemented by the `0.2.5` trusted-input background-control acceptance. Evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. |
+| 1 | Clean macOS distribution install from published pinned packages + signed XPI verification | ✅ | Final `v0.2.4` tuple installed without repository checkout on a clean GitHub-hosted macOS runner; dependency tree, imports, Codex recipe, signed XPI SHA/signature, native-host setup and doctor all passed. Run `37500599757`. |
+| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.6` runs on the user's `default-release` profile. Explicit sharing produced a fixed 30-day background grant over five tabs; snapshot, benign write and screenshot capture passed. Earlier shrink-only scope evidence remains valid. Evidence: `docs/evidence/stable-release-v0.2.4-2026-10-07.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
 | 5 | Duration: session, presets, custom bounds, exact deadline; expiry/revoke in queued request and active transfer; restart + rebind | ✅ | Unit bounds; companion expiry/clock-regression/queued-write/mid-transfer revoke; live fixed 3-day grant survives extension reload and Firefox restart as `rebind_required` with the original deadline. |
@@ -49,7 +49,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
 | 13 | Cached replay after revoke denied | ✅ | Companion VM (same-id snapshot replay after revoke is the reproduced F02 probe, now prevented). |
 | 14 | Multi-client / profile isolation | 🟡 | Real host tests: audience isolation, per-profile journals, single-writer lock. Two simultaneous real Firefox profiles were not run. |
-| 15 | Signed XPI/source compatibility | ✅ | Signed companion `0.2.5`, AMO version `6547131`, file `5091270`, SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`. `pnpm release:tuple --xpi` verified manifest `0.2.5`, Mozilla signature presence, and exact companion source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. |
+| 15 | Signed XPI/source compatibility | ✅ | Signed companion `0.2.6`, AMO version `6548018`, file `5092157`, SHA-256 `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`. `pnpm release:tuple --xpi` verified manifest `0.2.6`, Mozilla signature presence, and exact companion source SHA-256 `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`. |
 | 16 | Mismatched protocol fails closed | ✅ | Host + companion VM + doctor tests; a protocol-1 companion with a protocol-2 host is rejected for every op but `status`. |
 
 ## Codex runs (real Codex CLI 0.160.0, MCP server over stdio)
@@ -67,7 +67,7 @@ Consequence: release acceptance is tied to a tested **Codex surface/build + inst
 
 ## Stable release tuple
 
-Stable `v0.2.3`: `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, `@zamery/pi-browser@0.2.2`, companion `0.2.5`, native wire 2, BrowserProvider protocol 2. Signed XPI SHA-256: `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`. Durable evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. Previous stable `v0.2.2` evidence remains in `docs/evidence/stable-release-2026-10-06.json`.
+Stable `v0.2.4`: `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.3`, `@zamery/browser-mcp@0.1.2`, `@zamery/pi-browser@0.2.2`, companion `0.2.6`, native wire 2, BrowserProvider protocol 2. Signed XPI SHA-256: `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0`. Durable evidence: `docs/evidence/stable-release-v0.2.4-2026-10-07.json`. Previous stable evidence remains under `docs/evidence/`.
 
 ## Historical release-candidate tuples
 
@@ -81,9 +81,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-No stable release gate remains open for the scoped `v0.2.3` release. The exact npm tuple, Mozilla-signed/public Companion `0.2.5`, signed real-profile cooperative-background behavior, and clean distribution/install are accepted. Remaining items below are non-blocking coverage limits or deferred scope.
-
-For post-stable candidate `v0.2.4`, signed Companion `0.2.6` and signed real-profile gates are closed. Remaining gates are publishing `@zamery/browser-firefox@0.2.3`, clean distribution acceptance against the exact npm/XPI tuple, and final stable GitHub release closeout.
+All technical gates for stable `v0.2.4` are closed: published npm tuple, Mozilla-signed/public Companion `0.2.6`, signed real-profile behavior, and clean distribution/install are accepted. Only GitHub release/tag bookkeeping remains before final closeout.
 
 ## Known limitations of the current release scope
 

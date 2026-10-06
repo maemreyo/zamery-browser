@@ -2,7 +2,7 @@
 
 Purpose: prove that the **published, pinned** artifacts plus the **signed XPI** work on a macOS machine that has never seen this repository. Use only what a stranger could get: npm packages by exact version, the signed XPI, the recipe, and Codex. Do **not** clone the repo, use `pnpm`, or run anything from a checkout.
 
-For stable `v0.2.3`, distribution/install is automated by `.github/workflows/stable-distribution-acceptance.yml` using the exact npm tuple and AMO-signed companion `0.2.5`. The final tuple passed on GitHub Actions run `37462724579`. The authenticated live Firefox behavior is evidenced separately in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. The A–L procedure below remains the stronger end-to-end repetition for a dedicated clean Mac/VM.
+For stable `v0.2.4`, distribution/install is automated by `.github/workflows/stable-distribution-acceptance.yml` using the exact npm tuple and AMO-signed companion `0.2.6`. The final tuple passed on GitHub Actions run `37500599757`. The authenticated live Firefox behavior is evidenced separately in `docs/evidence/stable-release-v0.2.4-2026-10-07.json`. The A–L procedure below remains the stronger end-to-end repetition for a dedicated clean Mac/VM.
 
 Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user on the developer's Mac is only a "clean-user" run and does not satisfy the gate.
 
@@ -11,12 +11,12 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 | Item | Value |
 | --- | --- |
 | `@zamery/browser-provider` | `0.2.3` |
-| `@zamery/browser-firefox` | `0.2.2` |
+| `@zamery/browser-firefox` | `0.2.3` |
 | `@zamery/browser-mcp` | `0.1.2` |
 | `@zamery/pi-browser` | `0.2.2` |
-| Signed XPI | `zamery-browser-companion-0.2.5.xpi` · SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c` · AMO version `6547131`, file `5091270` |
-| Companion | `0.2.5`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
-| Stable package source git SHA | `4ca16f9ee6dfdab9a1c57b7abfdef9cde9ae87d9` |
+| Signed XPI | `zamery-browser-companion-0.2.6.xpi` · SHA-256 `7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0` · AMO version `6548018`, file `5092157` |
+| Companion | `0.2.6`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
+| Stable package source git SHA | `c8ae281342babeac24d8332ef1a2df8380dfb063` |
 | macOS / arch | record: `sw_vers`, `uname -m` |
 | Firefox | record the version (≥ 142) |
 | Node | record `node -v` (≥ 22.19 < 25), and the **absolute path** that `which node` prints |
@@ -28,15 +28,15 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 2. Install Firefox (release channel) and Node (22 or 24) and Codex. Launch Firefox once and **log in to one real site** (an account you can safely use, e.g. a throwaway account) so the profile has a real session. Open a second tab with another logged-in site and a third with an unrelated page.
 3. Copy the signed XPI to the machine and verify it:
    ```bash
-   shasum -a 256 <signed-0.2.5.xpi>    # must equal the SHA-256 recorded above
-   unzip -l <signed-0.2.5.xpi> | grep -E 'mozilla.rsa|manifest.json'
+   shasum -a 256 <signed-0.2.6.xpi>    # must equal the SHA-256 recorded above
+   unzip -l <signed-0.2.6.xpi> | grep -E 'mozilla.rsa|manifest.json'
    ```
 
 ## 2. Install the pinned packages (no tags, no repo)
 
 ```bash
 mkdir ~/zamery-stable && cd ~/zamery-stable && npm init -y
-npm i --save-exact @zamery/browser-provider@0.2.3 @zamery/browser-firefox@0.2.2 @zamery/browser-mcp@0.1.2 @zamery/pi-browser@0.2.2
+npm i --save-exact @zamery/browser-provider@0.2.3 @zamery/browser-firefox@0.2.3 @zamery/browser-mcp@0.1.2 @zamery/pi-browser@0.2.2
 npm ls --all | grep zamery            # exact versions, no duplicates
 npx zamery-browser-firefox setup --dry-run
 npx zamery-browser-firefox setup
@@ -49,7 +49,7 @@ Record the doctor output. Expected: no `fail` other than "no live session".
 
 1. In Firefox open the XPI (File → Open File… or drag it into the window) and accept the permission prompt. Record the permissions shown (all-site access, tabs, tab groups).
 2. Restart Firefox **once** (setup never does it for you).
-3. `npx zamery-browser-firefox doctor` again. Expected: `Live handshake OK` with the Firefox version, companion `0.2.5`, protocol compatible, access `revoked` or `rebind_required`; the add-on appears as signed in the profile registry line.
+3. `npx zamery-browser-firefox doctor` again. Expected: `Live handshake OK` with the Firefox version, companion `0.2.6`, protocol compatible, access `revoked` or `rebind_required`; the add-on appears as signed in the profile registry line.
 
 ## 4. Codex + recipe
 
