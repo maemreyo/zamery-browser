@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-06T12:20:00Z",
+  "status": "STABLE_RELEASE_ACCEPTED",
+  "release": {
+    "tag": "v0.2.3",
+    "release_tree_commit": "2cd90cc99be116a846298b5611720d8d801fce2e",
+    "browser_provider": "0.2.3",
+    "browser_firefox": "0.2.2",
+    "browser_mcp": "0.1.2",
+    "pi_browser": "0.2.2",
+    "companion": "0.2.5",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "npm": {
+    "@zamery/browser-provider": {"version":"0.2.3","shasum":"3d42a8312a8e1bfb5a947268a8fcee28b1803599","integrity":"sha512-XVqC+MJnN/OCE+i/d+gVhk8uZvqU7adEUYVoZQLCcw8Oyfk70NO21nh88uuVGxuZxwFVfXkYUag5DpHuEAJ98g=="},
+    "@zamery/browser-firefox": {"version":"0.2.2","shasum":"19c296e750aea82c221ee56c030bc2b999ec749e","integrity":"sha512-+uLegry61vcFa5GJa5G+9WsfyjBNj3a/+dC9tfsWqV8I38e2nISzaUvsbRGjlP8Gz/fY4BexwR+OhikaCL5O4Q=="},
+    "@zamery/browser-mcp": {"version":"0.1.2","shasum":"64b097d06261558744b889d4cda67e69019616d2","integrity":"sha512-lbg/J7xirkFcOhhEBtsHYN0bRJd2ylyVknjQ8GIl8uUyZz98ASuj/QSreeD3OKsPXrfRC1DJnQKqsZNQho2dlg=="},
+    "@zamery/pi-browser": {"version":"0.2.2","shasum":"409ccfd5033f703ef105682b0a739d0b1549459a","integrity":"sha512-wZ6rMyEfQFlSI80LbSP8fG+Js9slChidbtYmsnqnGibiF21TmYZX7D60s4rBpmGc7NLYfiURiX4/iMfdIYovgg=="}
+  },
+  "signed_xpi": {
+    "version": "0.2.5",
+    "amo_version_id": 6547131,
+    "amo_file_id": 5091270,
+    "sha256": "8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c",
+    "companion_source_sha256": "a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012",
+    "mozilla_signature_verified": true,
+    "amo_status": "public"
+  },
+  "signed_real_profile_acceptance": {
+    "firefox": "157.0",
+    "profile": "default-release",
+    "companion": "0.2.5",
+    "doctor": "PASS",
+    "rebind_after_update": "PASS",
+    "control_mode": "background",
+    "trusted_input_probe": "OS-level keystroke reached the agent-owned localhost page as INPUT-true",
+    "stale_observation": "PASS; old write refused with STALE_ELEMENT_REF / user_interaction / not_started",
+    "control_after_trusted_input": "agent_claimed",
+    "fresh_snapshot_without_resume": "PASS"
+  },
+  "clean_distribution_acceptance": {
+    "status": "PASS",
+    "github_actions_run_id": 37462724579,
+    "head_sha": "6c28fe1ddad4f62d16f66d943216522e4064d328",
+    "previous_candidate_run_id": 37459973241,
+    "note": "Run 37459973241 passed with browser-mcp 0.1.1 before the metadata-only 0.1.2 publication. Final run 37462724579 passed with browser-mcp 0.1.2."
+  },
+  "official_mcp_registry": {
+    "name": "io.github.maemreyo/zamery-browser",
+    "browser_mcp_version": "0.1.2",
+    "publish_workflow_run_id": 37462729537,
+    "status": "PASS"
+  },
+  "remaining_release_gates": []
+}

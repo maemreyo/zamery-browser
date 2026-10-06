@@ -40,7 +40,7 @@ jobs:
           npm install --save-exact \
             @zamery/browser-provider@0.2.3 \
             @zamery/browser-firefox@0.2.2 \
-            @zamery/browser-mcp@0.1.1 \
+            @zamery/browser-mcp@0.1.2 \
             @zamery/pi-browser@0.2.2
           npm ls @zamery/browser-provider @zamery/browser-firefox @zamery/browser-mcp @zamery/pi-browser
           test -f node_modules/@zamery/browser-mcp/codex/AGENTS.snippet.md
