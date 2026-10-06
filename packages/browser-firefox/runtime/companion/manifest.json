@@ -1,8 +1,15 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Companion for controlling the user's already-running browser through Zamery BrowserProvider.",
+  "icons": {
+    "16": "icons/zamery-16.png",
+    "32": "icons/zamery-32.png",
+    "48": "icons/zamery-48.png",
+    "96": "icons/zamery-96.png",
+    "128": "icons/zamery-128.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "zamery-browser-firefox@zamery.local",
@@ -33,6 +40,10 @@
   },
   "browser_action": {
     "default_title": "Zamery Browser",
+    "default_icon": {
+      "16": "icons/zamery-16.png",
+      "32": "icons/zamery-32.png"
+    },
     "default_popup": "popup.html"
   },
   "content_scripts": [

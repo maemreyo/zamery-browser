@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">Zamery Browser</title>
+  <desc id="desc">Browser control for AI agents with explicit user authorization and observable outcomes.</desc>
+  <defs>
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0E1D3A"/>
+      <stop offset="0.6" stop-color="#173B7A"/>
+      <stop offset="1" stop-color="#33236F"/>
+    </linearGradient>
+    <linearGradient id="markbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2457D6"/>
+      <stop offset="1" stop-color="#6D3CE6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" rx="30" fill="url(#panel)"/>
+  <circle cx="1055" cy="-30" r="240" fill="#7C5CFC" opacity=".08"/>
+  <circle cx="1120" cy="330" r="190" fill="#5BE7FF" opacity=".07"/>
+  <rect x="74" y="70" width="220" height="220" rx="58" fill="url(#markbg)"/>
+  <path d="M112 129h145" stroke="#B9D2FF" stroke-width="12" stroke-linecap="round" opacity=".55"/>
+  <circle cx="112" cy="105" r="8" fill="#7EE7FF"/>
+  <circle cx="138" cy="105" r="8" fill="#B5C7FF" opacity=".85"/>
+  <circle cx="164" cy="105" r="8" fill="#FFFFFF" opacity=".7"/>
+  <path d="M123 156h126L123 244h126" fill="none" stroke="#FFFFFF" stroke-width="25" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="352" y="154" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="62" font-weight="750">Zamery Browser</text>
+  <text x="354" y="206" fill="#C7D6F7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="25" font-weight="500">Typed browser control for AI agents.</text>
+  <text x="354" y="249" fill="#8EEBFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="20" font-weight="650">Explicit sharing · live Firefox · observable outcomes</text>
+</svg>

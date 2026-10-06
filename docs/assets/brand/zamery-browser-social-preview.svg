@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Zamery Browser social preview</title>
+  <desc id="desc">Zamery Browser, typed browser control for AI agents using the user's existing Firefox.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#091326"/>
+      <stop offset="0.58" stop-color="#142F63"/>
+      <stop offset="1" stop-color="#34236E"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2457D6"/>
+      <stop offset="1" stop-color="#6D3CE6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="640" fill="url(#bg)"/>
+  <circle cx="1110" cy="70" r="320" fill="#7C5CFC" opacity=".09"/>
+  <circle cx="1130" cy="610" r="260" fill="#5BE7FF" opacity=".07"/>
+  <rect x="110" y="144" width="260" height="260" rx="70" fill="url(#mark)"/>
+  <path d="M158 217h164" stroke="#B9D2FF" stroke-width="14" stroke-linecap="round" opacity=".55"/>
+  <circle cx="158" cy="187" r="10" fill="#7EE7FF"/>
+  <circle cx="190" cy="187" r="10" fill="#B5C7FF" opacity=".85"/>
+  <circle cx="222" cy="187" r="10" fill="#FFFFFF" opacity=".7"/>
+  <path d="M170 252h141L170 351h141" fill="none" stroke="#FFFFFF" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="430" y="260" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="70" font-weight="760">Zamery Browser</text>
+  <text x="434" y="320" fill="#C7D6F7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="29" font-weight="500">Typed browser control for AI agents</text>
+  <text x="434" y="370" fill="#8EEBFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="22" font-weight="650">Provider-neutral · user-authorized · live Firefox</text>
+  <rect x="434" y="414" width="190" height="42" rx="21" fill="#FFFFFF" opacity=".1"/>
+  <text x="461" y="442" fill="#FFFFFF" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="18" font-weight="650">@zamery/browser-mcp</text>
+</svg>

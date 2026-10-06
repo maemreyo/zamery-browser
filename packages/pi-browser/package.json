@@ -3,6 +3,7 @@
   "version": "0.2.1",
   "type": "module",
   "description": "Generic typed Pi browser tools backed by a BrowserProvider implementation.",
+  "keywords": ["pi", "ai-agents", "browser-automation", "browser-provider", "typescript"],
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {

@@ -1,8 +1,23 @@
-# Zamery Browser
+<p align="center">
+  <img src="docs/assets/brand/zamery-browser-hero.svg" alt="Zamery Browser — typed browser control for AI agents" width="900">
+</p>
+
+<p align="center">
+  <a href="https://github.com/maemreyo/zamery-browser/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/maemreyo/zamery-browser/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.npmjs.com/package/@zamery/browser-mcp"><img alt="npm @zamery/browser-mcp" src="https://img.shields.io/npm/v/%40zamery%2Fbrowser-mcp?label=browser-mcp"></a>
+  <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-blue"></a>
+  <a href="https://github.com/maemreyo/zamery-browser/discussions"><img alt="GitHub Discussions" src="https://img.shields.io/badge/community-Discussions-6f42c1"></a>
+</p>
 
 Typed browser control for AI agents, built around explicit capabilities, semantic snapshots, and observable action outcomes.
 
 Zamery Browser lets an agent work with a browser through a provider-neutral contract instead of coupling the agent to one automation engine. The Firefox provider connects to the user's already-running Firefox rather than launching a disposable browser profile.
+
+<p align="center">
+  <img src="docs/assets/brand/companion-flow.gif" alt="Zamery Browser Companion flow: explicit sharing, agent control, then user takeover and resume" width="390">
+</p>
+
+<p align="center"><sub>Companion UI preview with synthetic example tabs; no private browser data is shown.</sub></p>
 
 ## Install
 
@@ -89,6 +104,7 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Contributing](CONTRIBUTING.md)
 - [Community support](SUPPORT.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Brand assets](docs/brand.md)
 - [Examples](examples/README.md)
 
 ## Project status

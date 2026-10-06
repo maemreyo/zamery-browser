@@ -21,18 +21,25 @@ mkdir -p "$STAGED_SOURCE"
 
 # The production file set is derived from the manifest itself so it can never drift from what the extension loads.
 while IFS= read -r asset; do
+  mkdir -p "$(dirname "$STAGED_SOURCE/$asset")"
   cp "$SOURCE_DIR/$asset" "$STAGED_SOURCE/$asset"
 done < <(node --input-type=module - "$SOURCE_DIR/manifest.json" <<'NODE'
 import fs from "node:fs";
 
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
 const files = new Set(["manifest.json"]);
+const addIconMap = (icons) => {
+  if (!icons || typeof icons !== "object") return;
+  for (const file of Object.values(icons)) if (typeof file === "string") files.add(file);
+};
+addIconMap(manifest.icons);
 for (const file of manifest.background?.scripts ?? []) files.add(file);
 for (const script of manifest.content_scripts ?? []) for (const file of script.js ?? []) files.add(file);
 if (manifest.browser_action?.default_popup) {
   files.add(manifest.browser_action.default_popup);
   files.add(manifest.browser_action.default_popup.replace(/\.html$/, ".js"));
 }
+addIconMap(manifest.browser_action?.default_icon);
 for (const file of [...files].sort()) console.log(file);
 NODE
 )
@@ -74,11 +81,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 const sourceDir = process.argv[2];
-const files = fs.readdirSync(sourceDir).sort();
+const walk = (dir, prefix = "") => fs.readdirSync(dir, { withFileTypes: true })
+  .flatMap((entry) => entry.isDirectory()
+    ? walk(path.join(dir, entry.name), `${prefix}${entry.name}/`)
+    : [`${prefix}${entry.name}`]);
+const files = walk(sourceDir).sort();
 const hash = crypto.createHash("sha256");
 for (const file of files) {
   const fullPath = path.join(sourceDir, file);
-  if (!fs.statSync(fullPath).isFile()) continue;
   hash.update(file);
   hash.update("\0");
   hash.update(fs.readFileSync(fullPath));
