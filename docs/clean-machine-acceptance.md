@@ -2,7 +2,7 @@
 
 Purpose: prove that the **published, pinned** artifacts plus the **signed XPI** work on a macOS machine that has never seen this repository. Use only what a stranger could get: npm packages by exact version, the signed XPI, the recipe, and Codex. Do **not** clone the repo, use `pnpm`, or run anything from a checkout.
 
-For the `v0.2.3` release candidate, distribution/install is automated by `.github/workflows/stable-distribution-acceptance.yml` using the exact npm tuple and AMO-signed companion `0.2.5`. The previous stable `v0.2.2` clean runner passed in GitHub Actions run `37417918059`; the refreshed `v0.2.3` run is recorded in release evidence once complete. The A–L procedure below remains the stronger end-to-end repetition for a dedicated clean Mac/VM.
+For stable `v0.2.3`, distribution/install is automated by `.github/workflows/stable-distribution-acceptance.yml` using the exact npm tuple and AMO-signed companion `0.2.5`. The final tuple passed on GitHub Actions run `37462724579`. The authenticated live Firefox behavior is evidenced separately in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. The A–L procedure below remains the stronger end-to-end repetition for a dedicated clean Mac/VM.
 
 Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user on the developer's Mac is only a "clean-user" run and does not satisfy the gate.
 

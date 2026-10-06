@@ -40,9 +40,17 @@
     "fresh_snapshot_without_resume": "PASS"
   },
   "clean_distribution_acceptance": {
-    "status": "PASS_PENDING_FINAL_0.1.2_RERUN_ID",
+    "status": "PASS",
+    "github_actions_run_id": 37462724579,
+    "head_sha": "6c28fe1ddad4f62d16f66d943216522e4064d328",
     "previous_candidate_run_id": 37459973241,
-    "note": "Run 37459973241 passed with browser-mcp 0.1.1 before the metadata-only 0.1.2 publication. The final 0.1.2 rerun id is filled before tagging v0.2.3."
+    "note": "Run 37459973241 passed with browser-mcp 0.1.1 before the metadata-only 0.1.2 publication. Final run 37462724579 passed with browser-mcp 0.1.2."
   },
-  "remaining_release_gates": ["Record the final clean-distribution run id for browser-mcp 0.1.2 before tagging v0.2.3."]
+  "official_mcp_registry": {
+    "name": "io.github.maemreyo/zamery-browser",
+    "browser_mcp_version": "0.1.2",
+    "publish_workflow_run_id": 37462729537,
+    "status": "PASS"
+  },
+  "remaining_release_gates": []
 }
