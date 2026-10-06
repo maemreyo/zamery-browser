@@ -1,6 +1,6 @@
 {
   "at": "2026-10-07T00:04:33+07:00",
-  "status": "STABLE_ACCEPTED_PENDING_GITHUB_RELEASE",
+  "status": "STABLE_ACCEPTED",
   "release": {
     "tag": "v0.2.4",
     "browser_provider": "0.2.3",
@@ -48,7 +48,15 @@
     "head_sha": "c8ae281342babeac24d8332ef1a2df8380dfb063",
     "note": "Exact published npm tuple and Mozilla-signed Companion 0.2.6 installed and verified on the clean GitHub-hosted macOS runner."
   },
-  "remaining_release_gates": [
-    "Create the stable GitHub v0.2.4 release, then record its final tag/release metadata."
-  ]
+  "github_release": {
+    "status": "PASS",
+    "tag": "v0.2.4",
+    "tag_target_sha": "45f05a7afcf9bff5a54e219ceac2cc71cf7f6b0d",
+    "name": "Zamery Browser v0.2.4",
+    "published_at": "2026-10-07T00:14:15+07:00",
+    "url": "https://github.com/maemreyo/zamery-browser/releases/tag/v0.2.4",
+    "draft": false,
+    "prerelease": false
+  },
+  "remaining_release_gates": []
 }
