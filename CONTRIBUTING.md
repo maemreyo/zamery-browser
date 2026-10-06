@@ -1,21 +1,20 @@
 # Contributing to Zamery Browser
 
-Thank you for contributing to Zamery Browser. This repository contains the public source for the provider-neutral browser contracts, the Pi browser tools, and the Firefox provider.
+Thank you for contributing to Zamery Browser. This repository contains the public source for the provider-neutral browser contracts, the Pi browser tools, the Firefox provider, and the standalone MCP server.
 
 ## Development requirements
 
 - Node.js `>=22.19.0 <25`
 - pnpm `10.20.0`
 
-Install dependencies and run the public verification commands:
+Fork the repository, create a focused branch from `main`, then install dependencies and run the public verification command:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm build
-pnpm typecheck
+pnpm verify
 ```
 
-Pull requests must keep both `pnpm build` and `pnpm typecheck` passing.
+`pnpm verify` runs the build, typecheck, Firefox tests, and MCP tests. Pull requests must keep it passing.
 
 ## Scope and compatibility
 
@@ -33,14 +32,20 @@ Keep a pull request focused on one coherent change. Include:
 - documentation/example changes when behavior is user-visible;
 - the verification commands you ran.
 
-CI runs the build and typecheck on every pull request and on `main`.
+CI runs build, typecheck, and tests on every pull request and on `main`. `main` is protected: required CI must pass and review conversations must be resolved before merge.
 
 ## Issues
 
 Use the bug report template for reproducible defects and the feature request template for new capabilities. Include package versions, Node.js version, provider/browser context, and the smallest useful reproduction when applicable.
+
+Use GitHub Discussions for usage questions, design exploration, integration ideas that are not yet actionable feature requests, and general community help. See [SUPPORT.md](SUPPORT.md).
 
 For suspected vulnerabilities, do not open a public issue. Follow [SECURITY.md](SECURITY.md) and use GitHub private vulnerability reporting.
 
 ## License
 
 By contributing, you agree that your contributions will be licensed under the repository's Apache-2.0 license.
+
+## Community conduct
+
+Participation in issues, discussions, pull requests, reviews, and other project spaces is governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
