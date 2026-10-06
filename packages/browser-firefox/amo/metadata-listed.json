@@ -1,9 +1,9 @@
 {
   "summary": {
-    "en-US": "Control your already-running Firefox through Zamery BrowserProvider with explicit local authorization and observable browser actions."
+    "en-US": "Let local AI agents work in the Firefox you already use — only in tabs you explicitly share, with user-controlled takeover."
   },
   "description": {
-    "en-US": "Zamery Browser Companion connects your already-running Firefox to a locally installed Zamery Native Messaging host. It can inspect user-selected pages and perform bounded browser actions after the current local host session has been explicitly authorized. Broad page access is required for this browser-control function. The companion declares its Firefox data-collection categories in the manifest and does not contain remote advertising, analytics, or telemetry code."
+    "en-US": "Zamery Browser Companion connects the Firefox you already use to local AI agents through a locally installed Zamery host. You choose exactly which tabs or tab groups to share and which actions to allow. From the toolbar popup you can take control back, resume the agent, reduce access, or stop sharing at any time. The companion keeps the browser session user-owned instead of launching a disposable automation profile. Broad page access is required to inspect and act on the pages you explicitly share. The extension contains no remote advertising, analytics, or telemetry code."
   },
   "categories": [
     "other"

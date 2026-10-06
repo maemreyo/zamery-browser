@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Zamery Browser</title>
+<title>Zamery Browser Companion</title>
 <style>
-:root { color-scheme: light dark; --fg:#1b1b1f; --muted:#5c5c66; --bg:#fff; --card:#f4f4f7; --line:#d9d9e0; --ok:#0a7a3d; --warn:#9a5b00; --bad:#b00020; --accent:#2457d6; }
+:root { color-scheme: light dark; --fg:#1b1b1f; --muted:#5c5c66; --bg:#fff; --card:#f4f4f7; --line:#d9d9e0; --ok:#0a7a3d; --warn:#9a5b00; --bad:#b00020; --accent:#2457d6; --brand-violet:#6d3ce6; --brand-soft:#c7d6f7; }
 @media (prefers-color-scheme: dark) { :root { --fg:#f1f1f4; --muted:#a8a8b3; --bg:#1f1f24; --card:#2a2a31; --line:#40404a; --ok:#58d68d; --warn:#f0b35a; --bad:#ff7a8a; --accent:#7aa2ff; } }
 * { box-sizing: border-box; }
 body { font: 13px/1.45 system-ui, sans-serif; color: var(--fg); background: var(--bg); width: 360px; margin: 0; padding: 14px; }
 h1 { font-size: 14px; margin: 0 0 2px; }
-.brand { display:flex; align-items:center; gap:9px; margin-bottom:8px; }
-.brand img { width:28px; height:28px; border-radius:7px; }
+.brand { display:flex; align-items:center; gap:10px; margin:-2px -2px 12px; padding:10px 11px; border-radius:10px; color:#fff; background:linear-gradient(135deg,#173b7a 0%,#2457d6 55%,var(--brand-violet) 100%); box-shadow:0 1px 2px rgba(14,29,58,.22); }
+.brand img { width:32px; height:32px; border-radius:8px; box-shadow:0 0 0 1px rgba(255,255,255,.18); }
 .brand-copy { min-width:0; }
-.brand-copy h1 { font-size:14px; line-height:1.2; }
-.brand-copy .tagline { color:var(--muted); font-size:11px; line-height:1.2; }
+.brand-copy h1 { font-size:14px; line-height:1.2; color:#fff; }
+.brand-copy .tagline { color:var(--brand-soft); font-size:11px; line-height:1.25; margin-top:2px; }
 h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 6px; }
 .muted { color: var(--muted); }
 .row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
@@ -40,8 +40,8 @@ code { font-size: 11px; overflow-wrap: anywhere; }
 </head>
 <body>
 <div class="brand">
-  <img src="icons/zamery-32.png" alt="" width="28" height="28">
-  <div class="brand-copy"><h1>Zamery Browser</h1><div class="tagline">Your browser. Explicitly shared.</div></div>
+  <img src="icons/zamery-32.png" alt="" width="32" height="32">
+  <div class="brand-copy"><h1>Zamery Browser Companion</h1><div class="tagline">Your browser. Explicitly shared.</div></div>
 </div>
 <div class="pill" id="connection"><span class="dot" id="connection-dot"></span><span id="connection-text">Checking…</span></div>
 <div class="muted" id="connection-detail"></div>

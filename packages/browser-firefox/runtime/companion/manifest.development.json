@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion (Development)",
-  "version": "0.2.3",
-  "description": "Development identity for the Zamery browser companion canary.",
+  "version": "0.2.4",
+  "description": "Development identity for Zamery Browser Companion: explicit Firefox sharing for local AI agents.",
   "icons": {
     "16": "icons/zamery-16.png",
     "32": "icons/zamery-32.png",
@@ -39,7 +39,7 @@
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Zamery Browser (Dev)",
+    "default_title": "Zamery Browser Companion (Dev)",
     "default_icon": {
       "16": "icons/zamery-16.png",
       "32": "icons/zamery-32.png"
