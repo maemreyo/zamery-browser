@@ -12,6 +12,7 @@ permissions:
 jobs:
   publish:
     name: Publish with npm trusted publishing
+    if: ${{ github.event.release.prerelease == false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

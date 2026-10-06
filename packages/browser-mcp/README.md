@@ -9,12 +9,12 @@ agent host (stdio) → @zamery/browser-mcp → BrowserProvider V2 + optional int
 
 It does not depend on Pi or Zamery Workbench. It does not expose raw JavaScript/eval, and the agent cannot grant itself access.
 
-> Status: technical preview in development. Do not rely on the install command below until a release candidate with a published, signed companion is announced.
+> Status: technical preview. The accepted candidate uses `@zamery/browser-mcp@0.1.0-rc.4` with Mozilla-signed companion `0.2.2`. Signed real-profile acceptance passed; clean-machine macOS installation is explicitly waived rather than recorded as a PASS.
 
-## Install (prospective)
+## Install
 
 ```bash
-codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@<tested-version>
+codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@0.1.0-rc.4
 ```
 
 You also need the Firefox companion and the native host from `@zamery/browser-firefox` (see its README).
