@@ -17,7 +17,8 @@
     "amo_prepare": "PASS",
     "amo_lint": "0 errors / 0 warnings",
     "amo_source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
-    "unsigned_amo_zip": "prepared successfully; hash intentionally not retained because unsigned build ZIP metadata is not release authority"
+    "unsigned_amo_zip": "prepared successfully; hash intentionally not retained because unsigned build ZIP metadata is not release authority",
+    "signed_xpi_release_tuple": "PASS"
   },
   "npm": {
     "registry_smoke_install": "PASS",
@@ -49,14 +50,19 @@
     "browser_provider_protocol": 2,
     "journal_schema": 2,
     "source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
-    "signed_xpi": null,
+    "signed_xpi": {
+      "file": "f82d5bdb37964220aafe-0.2.1.xpi",
+      "amo_file_id": 5090088,
+      "sha256": "06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce",
+      "download_url": "https://addons.mozilla.org/firefox/downloads/file/5090088/f82d5bdb37964220aafe-0.2.1.xpi",
+      "release_tuple_has_mozilla_signature": true
+    },
     "amo_version_id": 6545949,
     "amo_version_url": "https://addons.mozilla.org/en-US/developers/addon/f82d5bdb37964220aafe/versions/6545949",
-    "signing_status": "SUBMITTED_PENDING_REVIEW"
+    "amo_reviewed_at": "2026-10-06T02:16:21Z",
+    "signing_status": "SIGNED_REVIEWED"
   },
   "remaining_release_gates": [
-    "Wait for Mozilla review/signing of submitted AMO version 6545949 and download the signed 0.2.1 XPI.",
-    "Record the signed 0.2.1 XPI SHA-256 in release:tuple and replace the pending XPI row in docs/clean-machine-acceptance.md.",
     "Run the clean-machine acceptance with the published pinned npm RCs and the signed XPI.",
     "Run the real already-authenticated Firefox-profile acceptance with the signed companion before claiming technical-preview GO."
   ]
