@@ -1,8 +1,8 @@
 # Codex + Firefox Community Roadmap
 
-Status: **GO WITH CHANGES for the revised implementation plan; current code is NO-GO for the community technical-preview gate.** Validated 2026-10-05 against HEAD `89736c469fca46b98d0022de176f76f7f3c82017`.
+Status: **Stable `v0.2.2` accepted for the scoped community release.** The original 2026-10-05 review below remains the design record; current release evidence is in [Technical preview status](technical-preview.md).
 
-> **Implementation status (2026-10-05):** P0 and most of P1 are implemented on `main`; the evidence-backed status of every preview-gate row, the live Firefox results and what is still missing (signed XPI, clean-machine install, real authenticated profile) are in [Technical preview status](technical-preview.md). The text below remains the design record.
+> **Implementation status (2026-10-06):** Stable npm artifacts, the Mozilla-signed companion, clean published-artifact installation, real authenticated-profile Firefox acceptance and the final release evidence are complete for `v0.2.2`. The text below remains the design record for the P0/P1 work and deferred P2/P3 scope.
 
 This document is implementation design, not evidence that the features or security fixes already exist. See the [deep validation review](CODEX_FIREFOX_COMMUNITY_VALIDATION_2026-10-05.md) for findings F01-F15, exact code observations, primary sources S1-S27, contract recommendations, failure models and acceptance matrix.
 
@@ -247,7 +247,7 @@ The [review's section 18](CODEX_FIREFOX_COMMUNITY_VALIDATION_2026-10-05.md#18-fi
 10. Canary inspection of journal/log/metadata/snapshot and legacy migration, cross-profile/audience isolation and single writer.
 11. Compatible signed artifacts and upgrade/rollback/doctor checks from clean-machine evidence.
 
-Unit/contract/integration/live Firefox/clean-machine results are distinct. Typecheck/lint and VM probes cannot stand in for live browser or distribution evidence. Record exact commands/run IDs, candidate identity, outcomes, unverified dimensions, reconciliation and rollback requirements. The current code has not passed this gate.
+Unit/contract/integration/live Firefox/clean-machine results are distinct. Typecheck/lint and VM probes cannot stand in for live browser or distribution evidence. Record exact commands/run IDs, candidate identity, outcomes, unverified dimensions, reconciliation and rollback requirements. Stable `v0.2.2` passed this scoped gate; see [Technical preview status](technical-preview.md) for the accepted tuple and remaining non-blocking coverage gaps.
 
 ## 7. P2 — bounded diagnostics, files and complex pages
 
