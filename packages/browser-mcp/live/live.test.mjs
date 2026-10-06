@@ -25,6 +25,19 @@ const text = (result) => result.content.map((part) => part.text ?? "").join("\n"
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pageValue = async (tabId, code) => (await live.user("page_script", { tab_id: tabId, code })).result;
 
+function countAgentPurple(png) {
+  let count = 0;
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const [r, g, b] = png.pixel(x, y);
+      // The ring animates opacity, so real pixels range from rgb(93,63,211) toward the page background.
+      // Match the blue-violet relationship rather than only the fully opaque source color.
+      if (b >= 145 && b - r >= 12 && b - g >= 18 && r >= 45 && g >= 25) count += 1;
+    }
+  }
+  return count;
+}
+
 async function openTab(pathname, { origin, active = false } = {}) {
   const tab = await live.user("open_tab", { url: `${origin ?? live.origin}${pathname}`, active });
   await sleep(500);
@@ -544,6 +557,56 @@ describe("live Firefox: screenshots as bounded artifacts", () => {
     assert.equal(gone.structuredContent.error.code, "ARTIFACT_EXPIRED");
     assert.equal(fs.existsSync(shot.structuredContent.local_path), false, "bytes deleted from disk");
     note("screenshot-limits-and-expiry", { oversizeRejected: true, artifactExpiredOnRevoke: true, fileDeleted: true });
+  });
+});
+
+describe("live Firefox: agent action presentation and screenshot suppression", () => {
+  it("shows the action cue in raw Firefox pixels but removes it from product screenshots", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    const snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const observation = snap.structuredContent.observation_id;
+    const rect = JSON.parse(await pageValue(tab.id, `JSON.stringify((() => { const r = document.getElementById('name').getBoundingClientRect(); return { x: Math.max(0, Math.floor(r.x + scrollX - 12)), y: Math.max(0, Math.floor(r.y + scrollY - 36)), width: Math.ceil(r.width + 24), height: Math.ceil(r.height + 52) }; })())`));
+
+    const acted = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: observation, ref: field, value: "Overlay visible" });
+    assert.equal(acted.isError, undefined, text(acted));
+    const raw = await live.user("capture_raw", { tab_id: tab.id, rect });
+    const rawPng = decodePng(Buffer.from(raw.data_url.split(",")[1], "base64"));
+    const visiblePurple = countAgentPurple(rawPng);
+    assert.ok(visiblePurple > 5, `expected visible overlay pixels, found ${visiblePurple}`);
+
+    const actedAgain = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: observation, ref: field, value: "Overlay suppressed" });
+    assert.equal(actedAgain.isError, undefined, text(actedAgain));
+    const shot = await call("browser_screenshot", { context_id: `tab:${tab.id}`, format: "png", include_image: false, rect });
+    assert.equal(shot.isError, undefined, text(shot));
+    const clean = decodePng(fs.readFileSync(shot.structuredContent.local_path));
+    const capturedPurple = countAgentPurple(clean);
+    assert.equal(capturedPurple, 0, `product screenshot contained ${capturedPurple} overlay-like pixels`);
+    note("agent-action-overlay-foreground", { visiblePurplePixels: visiblePurple, screenshotPurplePixels: capturedPurple, overlayVisible: true, screenshotClean: true });
+  });
+
+  it("keeps a background-tab capture clean while an agent action cue is active", async () => {
+    await reset();
+    const shared = await openTab("/form", { active: true });
+    const foreground = await openTab("/article");
+    await live.user("activate_tab", { tab_id: shared.id });
+    await share([shared.id], { control_mode: "background" });
+    const snap = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    const field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const rect = JSON.parse(await pageValue(shared.id, `JSON.stringify((() => { const r = document.getElementById('name').getBoundingClientRect(); return { x: Math.max(0, Math.floor(r.x + scrollX - 12)), y: Math.max(0, Math.floor(r.y + scrollY - 36)), width: Math.ceil(r.width + 24), height: Math.ceil(r.height + 52) }; })())`));
+    await live.user("activate_tab", { tab_id: foreground.id });
+    const acted = await call("browser_fill", { context_id: `tab:${shared.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "Background overlay" });
+    assert.equal(acted.isError, undefined, text(acted));
+    const shot = await call("browser_screenshot", { context_id: `tab:${shared.id}`, format: "png", include_image: false, rect });
+    assert.equal(shot.isError, undefined, text(shot));
+    const clean = decodePng(fs.readFileSync(shot.structuredContent.local_path));
+    assert.equal(countAgentPurple(clean), 0);
+    const realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((entry) => entry.id === foreground.id).active, true, "background capture did not steal focus");
+    note("agent-action-overlay-background", { screenshotClean: true, foregroundStayedActive: true });
   });
 });
 

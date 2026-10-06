@@ -35,6 +35,15 @@ async function executeAcceptanceOp(op, params) {
       const [result] = await browser.tabs.executeScript(params.tab_id, { code: String(params.code), runAt: "document_idle" });
       return { result: result ?? null };
     }
+    case "acceptance_capture_raw": {
+      // Acceptance-only pixel probe. This deliberately bypasses the product screenshot coordinator so the
+      // live suite can prove the presentation is visible before separately proving product capture suppresses it.
+      const rect = params.rect && typeof params.rect === "object" ? {
+        x: Number(params.rect.x), y: Number(params.rect.y), width: Number(params.rect.width), height: Number(params.rect.height),
+      } : undefined;
+      const dataUrl = await browser.tabs.captureTab(Number(params.tab_id), { format: "png", scale: 1, ...(rect ? { rect } : {}) });
+      return { data_url: dataUrl };
+    }
     case "acceptance_reload_extension": setTimeout(() => browser.runtime.reload(), 200); return { reloading: true };
     case "acceptance_private_window": {
       const win = await browser.windows.create({ incognito: true, url: params.url });

@@ -29,6 +29,12 @@ Both modes keep the same hard boundaries for explicit takeover, credential/OTP/p
 
 Those waiting states may raise attention: credential hand-off, explicit takeover requests, resume requests, cross-origin confirmation and restart/rebind can set a toolbar badge and optional OS notification. A diagnostic/doctor probe does not raise attention, and restart/rebind attention is emitted only after a live consumer checks in. Notification clicks only navigate the user toward the consent/control UI; they never perform Resume, Share or origin confirmation.
 
+## Agent action presentation
+
+The Firefox Companion may show a short-lived, pointer-inert ring and a fixed action label (`AI · click`, `AI · fill`, `AI · type`, or `AI · key`) around the exact top-frame DOM element that the content script already resolved for an authorized action. This overlay is presentation only: it never grants authority, never delays an action, never changes mutation outcome/receipt semantics, and never contains typed text, fill values, key values, URLs, titles, page text or agent-authored notes. The popup remains the trusted control surface for **Take over** and **Resume agent**. Users can disable the overlay in the popup; takeover, revoke, expiry, rebind, scope invalidation and disable clear current presentation.
+
+Screenshot capture suppresses this presentation with document-bound opaque tokens before `captureTab`. Suppression acknowledgement and a bounded render-settle step happen first, then capture authority, lineage, URL basis and document identity are re-proven immediately before dispatch. A caller timeout does not imply Firefox stopped capturing: if `captureTab` is still pending, the token and capture slot remain held until the underlying promise settles or the 30-second hard expiry, and late pixels are permanently excluded from artifact publication. Live Firefox 157 acceptance verified both foreground and background-tab screenshots contain no overlay pixels while a cue is active (`docs/evidence/live-firefox-agent-action-overlay-2026-10-06.json`).
+
 ## Privacy of what the agent sees
 
 - Snapshots export **no form values**, exclude hidden/non-rendered controls and report truncation and top-frame-only coverage. Password, one-time-code and payment-like fields are flagged and writes to them are refused (the agent hands over to the user).
@@ -59,4 +65,4 @@ No npm, GitHub, Mozilla AMO, browser-session, or local authorization credentials
 
 ## Not enforced / out of scope for the preview
 
-Trusted native input, OS-level dialogs, uploads/downloads, iframe traversal, closed shadow roots, console/network capture, authentication of the consuming process, protection from a compromised OS account.
+Trusted native input, OS-level dialogs, uploads/downloads, iframe traversal, closed shadow roots, console/network capture, authentication of the consuming process, protection from a compromised OS account. Agent-action highlighting is top-frame only and cannot guarantee visibility above every browser/page top-layer surface such as fullscreen or modal UI.

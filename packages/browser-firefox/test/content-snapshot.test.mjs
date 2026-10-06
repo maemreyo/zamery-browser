@@ -7,7 +7,7 @@ import { JSDOM } from "jsdom";
 const CONTENT_JS = fs.readFileSync(new URL("../runtime/companion/content.js", import.meta.url), "utf8");
 
 /** Loads the real content.js into a jsdom window with a minimal `browser` stub. */
-function loadPage(html) {
+function loadPage(html, options = {}) {
   const dom = new JSDOM(`<!doctype html><html><body>${html}</body></html>`, {
     url: "https://app.test/form",
     runScripts: "outside-only",
@@ -26,6 +26,7 @@ function loadPage(html) {
       sendMessage: async (message) => { sent.push(message); },
     },
   };
+  if (options.presence) window.ZameryAgentPresenceV1 = options.presence;
   if (!window.crypto?.randomUUID) window.crypto = { randomUUID: () => `doc-${Math.random().toString(36).slice(2)}` };
   window.eval(CONTENT_JS);
   const call = async (message) => {
@@ -155,6 +156,48 @@ describe("act safety", () => {
     const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
     const result = await page.call({ type: "zamery_browser_firefox_act", document_id: "other-document", node_id: snapshot.nodes[0].node_id, action: "click" });
     assert.equal(result.error.code, "STALE_ELEMENT_REF");
+  });
+
+  it("cues the exact resolved element only after unsupported action checks pass", async () => {
+    const cues = [];
+    const presence = {
+      version: 1,
+      bindDocument() { return this; },
+      showAction(element, action) { cues.push({ element, action }); },
+      status() { return { suppressed: false }; },
+    };
+    const page = loadPage('<input id="ok" aria-label="Ok"><div id="bad" tabindex="0">Bad</div><div id="rich" contenteditable="true" aria-label="Rich"></div>', { presence });
+    Object.defineProperty(page.document.querySelector("#rich"), "isContentEditable", { value: true, configurable: true });
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const byName = Object.fromEntries(snapshot.nodes.map((node) => [node.name, node]));
+
+    const fill = await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: byName.Ok.node_id, action: "fill", value: "secret-value" });
+    assert.equal(fill.ok, true);
+    assert.equal(cues.length, 1);
+    assert.equal(cues[0].element, page.document.querySelector("#ok"));
+    assert.equal(cues[0].action, "fill");
+
+    const unsupportedFill = await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: byName.Bad.node_id, action: "fill", value: "must-not-cue" });
+    assert.equal(unsupportedFill.error.reason, "element_not_fillable");
+    const unsupportedType = await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: byName.Rich.node_id, action: "type", text: "must-not-cue" });
+    assert.equal(unsupportedType.error.reason, "contenteditable_type_not_proven");
+    assert.equal(cues.length, 1, "unsupported actions must not emit a cue");
+  });
+
+  it("keeps action results unchanged when the presentation helper throws", async () => {
+    const presence = {
+      version: 1,
+      bindDocument() { return this; },
+      showAction() { throw new Error("presentation-fault"); },
+      status() { return { suppressed: false }; },
+    };
+    const page = loadPage('<button id="b">Go</button><input id="i" aria-label="Input">', { presence });
+    const snapshot = await page.call({ type: "zamery_browser_firefox_snapshot" });
+    const button = snapshot.nodes.find((node) => node.name === "Go");
+    const input = snapshot.nodes.find((node) => node.name === "Input");
+    assert.equal((await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: button.node_id, action: "click" })).ok, true);
+    assert.equal((await page.call({ type: "zamery_browser_firefox_act", document_id: snapshot.document_id, node_id: input.node_id, action: "fill", value: "x" })).ok, true);
+    assert.equal(page.document.querySelector("#i").value, "x");
   });
 });
 

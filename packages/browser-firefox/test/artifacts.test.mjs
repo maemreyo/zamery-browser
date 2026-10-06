@@ -113,6 +113,150 @@ describe("bounded screenshot capture", () => {
     assert.equal((await ask("screenshot_capture", { context_id: "tab:1" })).ok, true, "the slot is released afterwards");
   });
 
+  it("does not dispatch capture if authority is revoked while suppression confirmation is pending", async () => {
+    const { c, ask } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    let releaseConfirm;
+    const confirmGate = new Promise((resolve) => { releaseConfirm = resolve; });
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      if (message.type === "zamery_browser_firefox_overlay_confirm_suppression") await confirmGate;
+      return originalHandler(message, tab);
+    });
+    const pending = ask("screenshot_capture", { context_id: "tab:1" });
+    await settle(40);
+    await c.popup({ type: "zamery_browser_firefox_revoke" });
+    releaseConfirm();
+    const response = await pending;
+    assert.equal(response.ok, false);
+    assert.ok(["authorization_changed_before_capture", "authorization_changed_during_request"].includes(response.error.reason), JSON.stringify(response.error));
+    assert.equal(c.state.captureCalls, undefined, "captureTab must not run after revoke during the barrier");
+  });
+
+  it("does not dispatch capture if capture scope is removed while suppression confirmation is pending", async () => {
+    const { c, ask } = await boot({ actions: ["inspect", "interact", "capture"] });
+    const originalHandler = c.state.contentHandlers.get(1);
+    let releaseConfirm;
+    const confirmGate = new Promise((resolve) => { releaseConfirm = resolve; });
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      if (message.type === "zamery_browser_firefox_overlay_confirm_suppression") await confirmGate;
+      return originalHandler(message, tab);
+    });
+    const pending = ask("screenshot_capture", { context_id: "tab:1" });
+    await settle(40);
+    const reduced = await c.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [1],
+      actions: ["inspect", "interact"],
+      control_mode: "interactive",
+    });
+    assert.equal(reduced.ok, true);
+    releaseConfirm();
+    const response = await pending;
+    assert.equal(response.ok, false);
+    assert.equal(c.state.captureCalls, undefined, "captureTab must not run after capture scope shrinks during the barrier");
+  });
+
+  it("does not dispatch capture if the document changes immediately after suppression confirmation", async () => {
+    const { c, ask, page } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      const response = await originalHandler(message, tab);
+      if (message.type === "zamery_browser_firefox_overlay_confirm_suppression" && response?.ok) page.documentId = "doc-2";
+      return response;
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, false);
+    assert.equal(response.error.reason, "document_changed_before_capture");
+    assert.equal(c.state.captureCalls, undefined, "captureTab must not run after document replacement during the barrier");
+  });
+
+  it("does not add a claim requirement when Take over happens during suppression confirmation", async () => {
+    const { c, ask } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    let tookOver = false;
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      const response = await originalHandler(message, tab);
+      if (message.type === "zamery_browser_firefox_overlay_confirm_suppression" && response?.ok && !tookOver) {
+        tookOver = true;
+        await c.popup({ type: "zamery_browser_firefox_takeover" });
+      }
+      return response;
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.equal(c.state.captureCalls.length, 1);
+  });
+
+  it("keeps suppression through Take over, Resume and a new action until the underlying capture settles", async () => {
+    const { c, ask, page } = await boot({ actions: ["inspect", "interact", "capture"] });
+    let releaseCapture;
+    const originalCapture = c.browser.tabs.captureTab;
+    c.browser.tabs.captureTab = async (...args) => {
+      await new Promise((resolve) => { releaseCapture = resolve; });
+      return originalCapture(...args);
+    };
+
+    const pendingCapture = ask("screenshot_capture", { context_id: "tab:1" });
+    for (let index = 0; index < 20 && !releaseCapture; index += 1) await settle(10);
+    assert.equal(page.suppressionTokens.size, 1);
+
+    await c.popup({ type: "zamery_browser_firefox_takeover" });
+    assert.equal(page.suppressionTokens.size, 1, "takeover must not release capture suppression");
+    await c.popup({ type: "zamery_browser_firefox_resume" });
+    assert.equal(page.suppressionTokens.size, 1, "resume must not release capture suppression");
+
+    const snapshot = await ask("snapshot", { context_id: "tab:1", claim: true });
+    const ref = snapshot.result.nodes[0]?.ref;
+    if (ref) {
+      const acted = await ask("act", { context_id: "tab:1", ref, action: "click" });
+      assert.equal(acted.ok, true, JSON.stringify(acted));
+    }
+    assert.equal(page.suppressionTokens.size, 1, "a new action generation must remain suppressed during capture");
+
+    releaseCapture();
+    assert.equal((await pendingCapture).ok, true);
+    assert.equal(page.suppressionTokens.size, 0);
+  });
+
+  it("fails cleanly when the suppress ACK is lost and converges suppression by idempotent release", async () => {
+    const { c, ask, page } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    c.context.setTimeout = (fn, ms) => setTimeout(fn, ms === 1_000 ? 30 : ms);
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      if (message.type === "zamery_browser_firefox_overlay_suppress") {
+        await originalHandler(message, tab); // suppression applied, response is lost
+        return new Promise(() => {});
+      }
+      return originalHandler(message, tab);
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, false);
+    assert.equal(response.error.reason, "overlay_suppression_timeout");
+    assert.equal(c.state.captureCalls, undefined);
+    await settle(80);
+    assert.equal(page.suppressionTokens.size, 0, "release recovery removes a token whose suppress ACK was lost");
+  });
+
+  it("retries lost release acknowledgements without extending suppression forever", async () => {
+    const { c, ask, page } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    let releases = 0;
+    c.context.setTimeout = (fn, ms) => setTimeout(fn, ms === 1_000 ? 30 : ms);
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      if (message.type === "zamery_browser_firefox_overlay_release") {
+        releases += 1;
+        const response = await originalHandler(message, tab);
+        if (releases < 3) return new Promise(() => {}); // state changed but ACK was lost twice
+        return response;
+      }
+      return originalHandler(message, tab);
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.equal(releases, 3, "one initial release plus two bounded retries");
+    assert.equal(page.suppressionTokens.size, 0);
+  });
+
   it("drops the capture when authority ends while Firefox is rendering", async () => {
     const { c, ask, artifactsMap } = await boot();
     const original = c.browser.tabs.captureTab;
@@ -149,13 +293,22 @@ describe("bounded screenshot capture", () => {
     assert.equal((await garbage.ask("screenshot_capture", { context_id: "tab:1" })).error.reason, "image_header_unreadable");
   });
 
-  it("times out a stuck capture and frees the slot", async () => {
-    const { c, ask } = await boot();
-    c.browser.tabs.captureTab = () => new Promise(() => {});
-    // The real timeout is 20s; the sandbox timer is shortened so the test does not wait.
-    c.context.setTimeout = (fn, ms) => setTimeout(fn, ms > 1000 ? 30 : ms);
+  it("times out a caller, keeps suppression until the underlying capture settles, and never publishes late pixels", async () => {
+    const { c, ask, artifactsMap } = await boot();
+    let resolveCapture;
+    c.browser.tabs.captureTab = () => new Promise((resolve) => { resolveCapture = resolve; });
+    // Shorten only the 20s caller deadline; keep the hard-expiry distinct so we can prove the slot stays held.
+    c.context.setTimeout = (fn, ms) => setTimeout(fn, ms === 20_000 ? 30 : ms === 30_000 ? 500 : ms);
     const response = await ask("screenshot_capture", { context_id: "tab:1" });
     assert.equal(response.error.reason, "capture_timeout");
+    assert.equal(artifactsMap().size, 0);
+
+    const whilePending = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(whilePending.error.code, "RESOURCE_BUSY", "underlying capture still owns the slot after caller timeout");
+
+    resolveCapture(pngDataUrl(quadrantPng()));
+    await settle(40);
+    assert.equal(artifactsMap().size, 0, "late pixels are permanently disqualified from artifact publication");
     c.browser.tabs.captureTab = async () => pngDataUrl(quadrantPng());
     assert.equal((await ask("screenshot_capture", { context_id: "tab:1" })).ok, true);
   });

@@ -49,7 +49,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["asset-discovery-v1.js", "asset-transfer-v1.js", "content.js"],
+      "js": ["asset-discovery-v1.js", "asset-transfer-v1.js", "agent-presence.js", "content.js"],
       "all_frames": true,
       "run_at": "document_start"
     }

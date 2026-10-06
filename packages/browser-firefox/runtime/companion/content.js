@@ -28,6 +28,20 @@
   let interactionGeneration = 0;
   let armed = false;
 
+  function presenceRuntime() {
+    try {
+      const runtime = globalThis.ZameryAgentPresenceV1;
+      if (runtime?.version !== 1 || typeof runtime.bindDocument !== "function") return null;
+      return runtime.bindDocument(documentId);
+    } catch {
+      return null;
+    }
+  }
+
+  function safeShowAction(element, action) {
+    try { presenceRuntime()?.showAction?.(element, action); } catch {}
+  }
+
   function onHumanInteraction(event) {
     if (!event.isTrusted) return;
     interactionGeneration += 1;
@@ -303,6 +317,7 @@
       : Promise.resolve();
 
     if (request.action === "click") {
+      safeShowAction(element, "click");
       const observedTrusted = observeTrust(element, "click", () => element.click());
       await delayAfter();
       return {
@@ -317,9 +332,11 @@
     if (request.action === "fill") {
       const value = String(request.value ?? "");
       if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+        safeShowAction(element, "fill");
         setNativeValue(element, value);
         dispatchInputEvents(element);
       } else if (element.isContentEditable) {
+        safeShowAction(element, "fill");
         element.textContent = value;
         dispatchInputEvents(element);
       } else {
@@ -332,6 +349,7 @@
     if (request.action === "type") {
       const text = String(request.text ?? "");
       if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+        safeShowAction(element, "type");
         element.focus();
         const start = element.selectionStart ?? element.value.length;
         const end = element.selectionEnd ?? element.value.length;
@@ -356,6 +374,7 @@
 
     if (request.action === "key") {
       const key = String(request.key ?? "");
+      safeShowAction(element, "key");
       element.focus();
       const eventInit = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true };
       const trusted = observeTrust(element, "keydown", () => {
@@ -446,6 +465,36 @@
 
   browser.runtime.onMessage.addListener((message) => {
     if (!message || typeof message !== "object") return undefined;
+    if (message.type === "zamery_browser_firefox_presence_sync") {
+      const runtime = presenceRuntime();
+      if (!runtime) return Promise.resolve({ ok: false, reason: "agent_presence_unavailable", document_id: documentId });
+      return Promise.resolve(runtime.syncScope({
+        expected_document_id: message.expected_document_id,
+        enabled: message.enabled,
+        scope_valid: message.scope_valid,
+        control_revision: message.control_revision,
+      }));
+    }
+    if (message.type === "zamery_browser_firefox_presence_clear") {
+      const runtime = presenceRuntime();
+      try { runtime?.clear?.(message.reason); } catch {}
+      return Promise.resolve({ ok: Boolean(runtime), document_id: documentId });
+    }
+    if (message.type === "zamery_browser_firefox_overlay_suppress") {
+      const runtime = presenceRuntime();
+      if (!runtime) return Promise.resolve({ ok: false, reason: "agent_presence_unavailable", document_id: documentId });
+      return Promise.resolve(runtime.suppress(message.token, message.expected_document_id, message.expires_at));
+    }
+    if (message.type === "zamery_browser_firefox_overlay_confirm_suppression") {
+      const runtime = presenceRuntime();
+      if (!runtime) return Promise.resolve({ ok: false, reason: "agent_presence_unavailable", document_id: documentId });
+      return Promise.resolve(runtime.confirmSuppression(message.token, message.expected_document_id));
+    }
+    if (message.type === "zamery_browser_firefox_overlay_release") {
+      const runtime = presenceRuntime();
+      if (!runtime) return Promise.resolve({ ok: false, reason: "agent_presence_unavailable", document_id: documentId });
+      return Promise.resolve(runtime.release(message.token, message.expected_document_id));
+    }
     if (message.type === "zamery_browser_firefox_arm") {
       armed = true;
       return undefined;
@@ -508,6 +557,8 @@
     }
     if (message.type === "zamery_browser_firefox_ping" || message.type === "zamery_v0c_ping") {
       if (message.arm === true) armed = true;
+      const presence = presenceRuntime();
+      const presenceStatus = presence?.status?.();
       return Promise.resolve({
         interaction_generation: interactionGeneration,
         document_id: documentId,
@@ -523,6 +574,9 @@
         asset_discovery_v1_ready: Boolean(assetDiscoveryRuntime),
         asset_transfer_v1_ready: Boolean(assetTransferRuntime),
         a1_asset_experiment_ready: Boolean(assetRuntime),
+        agent_presence_v1_ready: Boolean(presence),
+        agent_presence_version: presence?.version || null,
+        agent_presence_suppressed: presenceStatus?.suppressed === true,
       });
     }
     return undefined;

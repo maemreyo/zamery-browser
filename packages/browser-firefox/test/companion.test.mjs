@@ -386,6 +386,46 @@ describe("protocol mismatch fails closed", () => {
 });
 
 describe("human <-> agent control", () => {
+  it("keeps action outcome stable with presentation enabled or disabled", async () => {
+    const enabled = await boot();
+    const enabledRef = await claimedRef(enabled.ask);
+    const enabledResult = await enabled.ask("act", { context_id: "tab:1", ref: enabledRef, action: "click" });
+
+    const disabled = await boot();
+    await disabled.company.popup({ type: "zamery_browser_firefox_set_agent_presence", enabled: false });
+    const disabledRef = await claimedRef(disabled.ask);
+    const disabledResult = await disabled.ask("act", { context_id: "tab:1", ref: disabledRef, action: "click" });
+
+    const stable = (response) => ({
+      ok: response.ok,
+      outcome: response.outcome,
+      result: response.result,
+      cancellation: response.cancellation,
+    });
+    assert.deepEqual(stable(disabledResult), stable(enabledResult));
+  });
+
+  it("persists the presentation preference and clears cues on disable, takeover and resume", async () => {
+    const { company, pages, ask } = await boot();
+    await claimedRef(ask);
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).agent_presence_enabled, true);
+
+    const disabled = await company.popup({ type: "zamery_browser_firefox_set_agent_presence", enabled: false });
+    assert.equal(disabled.agent_presence_enabled, false);
+    assert.equal(company.storage.get("zameryBrowserFirefoxAgentPresencePreferencesV1").enabled, false);
+    assert.ok(pages[1].presenceClears.some((message) => message.reason === "preference_disabled"));
+
+    await company.popup({ type: "zamery_browser_firefox_set_agent_presence", enabled: true });
+    assert.equal(company.storage.get("zameryBrowserFirefoxAgentPresencePreferencesV1").enabled, true);
+    const clearsBeforeTakeover = pages[1].presenceClears.length;
+    await company.popup({ type: "zamery_browser_firefox_takeover" });
+    assert.ok(pages[1].presenceClears.length > clearsBeforeTakeover);
+    assert.ok(pages[1].presenceClears.some((message) => message.reason === "takeover"));
+
+    await company.popup({ type: "zamery_browser_firefox_resume" });
+    assert.ok(pages[1].presenceClears.some((message) => message.reason === "resume"));
+  });
+
   it("requires a claim and a fresh observation before any write", async () => {
     const { ask } = await boot();
     const snapshot = await ask("snapshot", { context_id: "tab:1" });

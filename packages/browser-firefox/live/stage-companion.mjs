@@ -16,7 +16,7 @@ export function stageAcceptanceCompanion(outDir) {
   manifest.name = "Zamery Acceptance Companion (isolated)";
   manifest.browser_specific_settings.gecko.id = ACCEPTANCE_EXTENSION_ID;
   manifest.background.scripts = [...manifest.background.scripts.filter((file) => file !== "start.js"), "acceptance-ops.js", "start.js"];
-  const files = new Set(["policy.js", "background.js", "control-ops.js", "artifacts.js", "content.js", "popup.html", "popup.js", "asset-discovery-v1.js", "asset-transfer-v1.js", "start.js"]);
+  const files = new Set(["policy.js", "background.js", "control-ops.js", "artifacts.js", "agent-presence.js", "content.js", "popup.html", "popup.js", "asset-discovery-v1.js", "asset-transfer-v1.js", "start.js"]);
   for (const file of files) fs.copyFileSync(path.join(SOURCE, file), path.join(outDir, file));
   fs.copyFileSync(new URL("./acceptance-ops.js", import.meta.url), path.join(outDir, "acceptance-ops.js"));
 

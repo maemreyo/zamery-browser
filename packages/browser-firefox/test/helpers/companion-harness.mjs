@@ -348,11 +348,32 @@ export function settle(ms = 10) {
 }
 
 /** A permissive page-script stand-in: acknowledges ping/snapshot/act like content.js would. */
-export function pageScript({ documentId = "doc-1", snapshotNodes = [], onAct } = {}) {
-  const page = { documentId, acts: [], interactionGeneration: 0 };
+export function pageScript({
+  documentId = "doc-1",
+  snapshotNodes = [],
+  onAct,
+  agentPresenceReady = true,
+  onSuppress,
+  onConfirmSuppression,
+  onReleaseSuppression,
+} = {}) {
+  const page = { documentId, acts: [], interactionGeneration: 0, suppressionTokens: new Set(), presenceClears: [], presenceSyncs: [] };
   page.handler = async (message, tab) => {
     if (message.type === "zamery_browser_firefox_ping") {
-      return { document_id: page.documentId, browser_document_id: null, url: tab.url, title: tab.title, viewport_width: 800, viewport_height: 600, interaction_generation: page.interactionGeneration, asset_discovery_v1_ready: false, asset_transfer_v1_ready: false };
+      return {
+        document_id: page.documentId,
+        browser_document_id: null,
+        url: tab.url,
+        title: tab.title,
+        viewport_width: 800,
+        viewport_height: 600,
+        interaction_generation: page.interactionGeneration,
+        asset_discovery_v1_ready: false,
+        asset_transfer_v1_ready: false,
+        agent_presence_v1_ready: agentPresenceReady,
+        agent_presence_version: agentPresenceReady ? 1 : null,
+        agent_presence_suppressed: page.suppressionTokens.size > 0,
+      };
     }
     if (message.type === "zamery_browser_firefox_snapshot") {
       return { document_id: page.documentId, browser_document_id: null, url: tab.url, title: tab.title, interaction_generation: page.interactionGeneration, nodes: snapshotNodes };
@@ -360,6 +381,42 @@ export function pageScript({ documentId = "doc-1", snapshotNodes = [], onAct } =
     if (message.type === "zamery_browser_firefox_act") {
       page.acts.push(message);
       return onAct ? onAct(message) : { ok: true, mechanism: "dom-synthetic", observed_is_trusted: false };
+    }
+    if (message.type === "zamery_browser_firefox_presence_sync") {
+      page.presenceSyncs.push(message);
+      return { ok: agentPresenceReady, document_id: page.documentId };
+    }
+    if (message.type === "zamery_browser_firefox_presence_clear") {
+      page.presenceClears.push(message);
+      return { ok: agentPresenceReady, document_id: page.documentId };
+    }
+    if (message.type === "zamery_browser_firefox_overlay_suppress") {
+      if (onSuppress) {
+        const result = await onSuppress(message, page);
+        if (result !== undefined) return result;
+      }
+      if (!agentPresenceReady || message.expected_document_id !== page.documentId) return { ok: false, reason: "document_mismatch", document_id: page.documentId };
+      page.suppressionTokens.add(message.token);
+      return { ok: true, state: "suppression_applied", token: message.token, document_id: page.documentId, suppression_active: true };
+    }
+    if (message.type === "zamery_browser_firefox_overlay_confirm_suppression") {
+      if (onConfirmSuppression) {
+        const result = await onConfirmSuppression(message, page);
+        if (result !== undefined) return result;
+      }
+      const active = page.suppressionTokens.has(message.token) && message.expected_document_id === page.documentId;
+      return active
+        ? { ok: true, state: "suppression_confirmed", token: message.token, document_id: page.documentId, suppression_active: true, paint_barrier: "foreground-double-raf" }
+        : { ok: false, reason: "suppression_not_active", document_id: page.documentId };
+    }
+    if (message.type === "zamery_browser_firefox_overlay_release") {
+      if (onReleaseSuppression) {
+        const result = await onReleaseSuppression(message, page);
+        if (result !== undefined) return result;
+      }
+      if (message.expected_document_id !== page.documentId) return { ok: false, reason: "document_mismatch", document_id: page.documentId };
+      page.suppressionTokens.delete(message.token);
+      return { ok: true, state: "suppression_released", token: message.token, document_id: page.documentId, suppression_active: page.suppressionTokens.size > 0 };
     }
     return undefined;
   };

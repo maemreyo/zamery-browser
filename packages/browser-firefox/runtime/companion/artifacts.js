@@ -6,12 +6,15 @@ const SHOT_MAX_PIXELS = 8_000_000;
 const SHOT_MAX_ENCODED_BYTES = 8 * 1024 * 1024;
 const SHOT_CHUNK_RAW_BYTES = 64 * 1024;
 const SHOT_CAPTURE_TIMEOUT_MS = 20_000;
+const OVERLAY_SUPPRESSION_BARRIER_TIMEOUT_MS = 1_000;
+const OVERLAY_SUPPRESSION_HARD_EXPIRY_MS = 30_000;
+const OVERLAY_RELEASE_MAX_ATTEMPTS = 3;
 const SHOT_TTL_MS = 30 * 60 * 1000;
 const SHOT_MAX_AUDIENCE_BYTES = 64 * 1024 * 1024;
 const SHOT_MAX_ARTIFACTS = 16;
 
 const artifacts = new Map();
-let captureInFlight = false;
+let captureInFlight = null;
 
 function isPositiveInt(value) {
   return Number.isSafeInteger(value) && value > 0;
@@ -82,6 +85,90 @@ function shotError(code, reason, message) {
   return newError(code, message || reason, reason);
 }
 
+async function overlayContentRpc(tabId, target, message, reason) {
+  let timer;
+  try {
+    return await Promise.race([
+      browser.tabs.sendMessage(tabId, message, target),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(shotError("BROWSER_REQUEST_TIMEOUT", reason, "overlay suppression coordination timed out")), OVERLAY_SUPPRESSION_BARRIER_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function overlayTarget(ping) {
+  return primaryDocumentTarget(ping?.browser_document_id);
+}
+
+async function beginOverlaySuppression(tabId, ping) {
+  if (!ping?.agent_presence_v1_ready || ping.agent_presence_version !== 1 || !ping.document_id) {
+    throw shotError("BROWSER_REQUEST_FAILED", "overlay_suppression_unavailable", "agent presentation suppression is unavailable in this document");
+  }
+  const issuedAt = Date.now();
+  const state = {
+    token: `capture_${crypto.randomUUID()}`,
+    tabId,
+    documentId: ping.document_id,
+    browserDocumentId: ping.browser_document_id || null,
+    urlHash: urlHash(ping.url),
+    target: overlayTarget(ping),
+    issuedAt,
+    expiresAt: issuedAt + OVERLAY_SUPPRESSION_HARD_EXPIRY_MS,
+  };
+  try {
+    const applied = await overlayContentRpc(tabId, state.target, {
+      type: "zamery_browser_firefox_overlay_suppress",
+      token: state.token,
+      expected_document_id: state.documentId,
+      expires_at: state.expiresAt,
+    }, "overlay_suppression_timeout");
+    if (!applied?.ok || applied.state !== "suppression_applied" || applied.document_id !== state.documentId || applied.suppression_active !== true) {
+      throw shotError("BROWSER_REQUEST_FAILED", "overlay_suppression_not_applied");
+    }
+    const confirmed = await overlayContentRpc(tabId, state.target, {
+      type: "zamery_browser_firefox_overlay_confirm_suppression",
+      token: state.token,
+      expected_document_id: state.documentId,
+    }, "overlay_suppression_confirmation_timeout");
+    if (!confirmed?.ok || confirmed.state !== "suppression_confirmed" || confirmed.document_id !== state.documentId || confirmed.suppression_active !== true) {
+      throw shotError("BROWSER_REQUEST_FAILED", "overlay_suppression_unconfirmed");
+    }
+    state.paintBarrier = confirmed.paint_barrier || "unknown";
+    return state;
+  } catch (error) {
+    void releaseOverlaySuppression(state);
+    throw error;
+  }
+}
+
+async function releaseOverlaySuppression(state) {
+  if (!state?.token || Date.now() >= state.expiresAt) return false;
+  for (let attempt = 0; attempt < OVERLAY_RELEASE_MAX_ATTEMPTS && Date.now() < state.expiresAt; attempt += 1) {
+    try {
+      const released = await overlayContentRpc(state.tabId, state.target, {
+        type: "zamery_browser_firefox_overlay_release",
+        token: state.token,
+        expected_document_id: state.documentId,
+      }, "overlay_release_timeout");
+      if (released?.ok && released.state === "suppression_released" && released.document_id === state.documentId) return true;
+      if (released?.reason === "document_mismatch") return false;
+    } catch {}
+  }
+  return false;
+}
+
+function sameCapturedDocument(before, after) {
+  return Boolean(
+    before?.document_id
+    && after?.document_id === before.document_id
+    && (!before.browser_document_id || after.browser_document_id === before.browser_document_id)
+    && urlHash(after?.url) === urlHash(before?.url),
+  );
+}
+
 /** Resolve and validate the capture rectangle from explicit input or the page's observed viewport. */
 function resolveCaptureRect(params, ping) {
   const viewport = {
@@ -129,28 +216,67 @@ async function captureScreenshot(params, message) {
 
   const { tabId } = await contextAuthorization(contextId, "capture");
   if (captureInFlight) throw shotError("RESOURCE_BUSY", "capture_in_progress", "another capture is still running");
-  captureInFlight = true;
+  const captureSlot = crypto.randomUUID();
+  captureInFlight = captureSlot;
   const lineage = lineageNow(audienceId);
+  let suppression = null;
+  let callerTimedOut = false;
+  let hardExpiryTimer = null;
+  const releaseSlot = () => {
+    if (captureInFlight === captureSlot) captureInFlight = null;
+  };
   try {
     pruneArtifacts();
     const before = await ensureContent(tabId).catch(() => null);
     if (!before?.document_id) throw shotError("BROWSER_CONTEXT_UNAVAILABLE", "content_unavailable");
     const rect = resolveCaptureRect(params, before);
     const { scale, outWidth, outHeight } = resolveCaptureScale(params, rect);
+    suppression = await beginOverlaySuppression(tabId, before);
+
+    // Suppression coordination creates an authority/document race window. Re-prove the original capture
+    // lineage and exact document immediately before calling captureTab; Take over alone is not a claim gate.
+    if (!lineageCurrent(lineage)) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "authorization_changed_before_capture");
+    const preDispatchAuthorization = await contextAuthorization(contextId, "capture");
+    if (preDispatchAuthorization.tabId !== tabId) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "capture_context_rebound");
+    const preDispatch = await ensureContent(tabId).catch(() => null);
+    if (!sameCapturedDocument(before, preDispatch)) {
+      throw newError("BROWSER_DOCUMENT_CHANGED", "the page changed while screenshot suppression was being confirmed", "document_changed_before_capture");
+    }
 
     const options = { format, scale, rect };
     if (quality !== undefined) options.quality = quality;
     let timer;
-    const dataUrl = await Promise.race([
-      browser.tabs.captureTab(tabId, options),
-      new Promise((_, reject) => { timer = setTimeout(() => reject(shotError("BROWSER_REQUEST_TIMEOUT", "capture_timeout", "tab capture did not finish in time")), SHOT_CAPTURE_TIMEOUT_MS); }),
-    ]).finally(() => clearTimeout(timer));
+    const underlyingCapture = Promise.resolve().then(() => browser.tabs.captureTab(tabId, options));
+    let dataUrl;
+    try {
+      dataUrl = await Promise.race([
+        underlyingCapture,
+        new Promise((_, reject) => { timer = setTimeout(() => reject(shotError("BROWSER_REQUEST_TIMEOUT", "capture_timeout", "tab capture did not finish in time")), SHOT_CAPTURE_TIMEOUT_MS); }),
+      ]);
+    } catch (error) {
+      if (error?.reason !== "capture_timeout") throw error;
+      callerTimedOut = true;
+      const settleLateCapture = () => {
+        if (hardExpiryTimer) clearTimeout(hardExpiryTimer);
+        void releaseOverlaySuppression(suppression);
+        releaseSlot();
+      };
+      // The late capture result is intentionally ignored forever; it never re-enters artifact publication.
+      void underlyingCapture.then(settleLateCapture, settleLateCapture);
+      hardExpiryTimer = setTimeout(() => {
+        void releaseOverlaySuppression(suppression);
+        releaseSlot();
+      }, Math.max(0, suppression.expiresAt - Date.now()));
+      throw error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
 
     // Authority and page identity may have moved while Firefox rendered. Re-prove both before keeping pixels.
     if (!lineageCurrent(lineage)) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "authorization_changed_during_capture");
     const { tab: after } = await contextAuthorization(contextId, "capture");
     const afterPing = await ensureContent(tabId).catch(() => null);
-    if (afterPing?.document_id !== before.document_id || urlHash(afterPing?.url) !== urlHash(before.url)) {
+    if (!sameCapturedDocument(before, afterPing)) {
       throw newError("BROWSER_DOCUMENT_CHANGED", "the page changed while it was being captured", "document_changed_during_capture");
     }
     void after;
@@ -204,7 +330,11 @@ async function captureScreenshot(params, message) {
     artifacts.set(artifactId, artifact);
     return { outcome: "completed", ...artifactDescriptor(artifact) };
   } finally {
-    captureInFlight = false;
+    if (!callerTimedOut) {
+      if (hardExpiryTimer) clearTimeout(hardExpiryTimer);
+      if (suppression) await releaseOverlaySuppression(suppression);
+      releaseSlot();
+    }
   }
 }
 

@@ -10,6 +10,7 @@ export function firefoxCompanionManifestPath(kind: FirefoxCompanionManifestKind)
 export type FirefoxCompanionAssetFile =
   | "asset-discovery-v1.js"
   | "asset-transfer-v1.js"
+  | "agent-presence.js"
   | "background.js"
   | "content.js"
   | "control-ops.js"
