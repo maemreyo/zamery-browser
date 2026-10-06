@@ -473,12 +473,24 @@
         enabled: message.enabled,
         scope_valid: message.scope_valid,
         control_revision: message.control_revision,
+        presentation_epoch: message.presentation_epoch,
+        presentation_revision: message.presentation_revision,
       }));
     }
     if (message.type === "zamery_browser_firefox_presence_clear") {
       const runtime = presenceRuntime();
-      try { runtime?.clear?.(message.reason); } catch {}
-      return Promise.resolve({ ok: Boolean(runtime), document_id: documentId });
+      if (!runtime) return Promise.resolve({ ok: false, reason: "agent_presence_unavailable", document_id: documentId });
+      if (typeof runtime.clearPresentation === "function") {
+        return Promise.resolve(runtime.clearPresentation({
+          expected_document_id: message.expected_document_id,
+          control_revision: message.control_revision,
+          presentation_epoch: message.presentation_epoch,
+          presentation_revision: message.presentation_revision,
+          reason: message.reason,
+        }));
+      }
+      try { runtime.clear?.(message.reason); } catch {}
+      return Promise.resolve({ ok: true, document_id: documentId });
     }
     if (message.type === "zamery_browser_firefox_overlay_suppress") {
       const runtime = presenceRuntime();

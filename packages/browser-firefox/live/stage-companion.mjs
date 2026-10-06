@@ -27,6 +27,52 @@ export function stageAcceptanceCompanion(outDir) {
     fs.writeFileSync(target, text.replace(from, to));
   };
   patch("background.js", 'const HOST_NAME = "com.zamery.browser_firefox";', `const HOST_NAME = "${ACCEPTANCE_HOST_NAME}";`);
+  // Acceptance-only capture gate: pause after the production suppression/freshness checks and immediately
+  // before Firefox capture dispatch so a live test can prove an action begun during suppression stays invisible.
+  patch(
+    "artifacts.js",
+    '      underlyingCapture = Promise.resolve(browser.tabs.captureTab(tabId, options));',
+    '      await globalThis.ZameryAcceptanceCaptureGate?.waitBeforeCapture?.();\n      underlyingCapture = Promise.resolve(browser.tabs.captureTab(tabId, options));',
+  );
+  // Acceptance-only presentation probes. They expose no page payload and exist only in the isolated staged copy,
+  // allowing live Firefox to measure cue identity/geometry and force reduced-motion/fault branches deterministically.
+  patch(
+    "agent-presence.js",
+    '  function reducedMotionRequested() {\n    return swallow(() => matchMedia("(prefers-reduced-motion: reduce)").matches) === true;\n  }',
+    '  function reducedMotionRequested() {\n    if (globalThis.ZameryAcceptancePresenceControl?.forceReducedMotion === true) return true;\n    return swallow(() => matchMedia("(prefers-reduced-motion: reduce)").matches) === true;\n  }',
+  );
+  patch(
+    "agent-presence.js",
+    '        animation = ring.animate([',
+    '        if (globalThis.ZameryAcceptancePresenceControl?.throwAnimation === true) throw new Error("acceptance_animation_fault");\n        animation = ring.animate([',
+  );
+  patch(
+    "agent-presence.js",
+    '  const api = Object.freeze({ version: VERSION, bindDocument, syncScope, clearPresentation, showAction, clear, suppress, confirmSuppression, release, status });',
+    `  globalThis.ZameryAcceptancePresenceDebug = Object.freeze({
+    snapshot() {
+      return {
+        enabled,
+        scopeValid,
+        cueVisible: Boolean(host?.isConnected && wrapper && !wrapper.hidden && host.style.visibility !== "hidden"),
+        label: label?.textContent || null,
+        targetId: target?.id || null,
+        targetConnected: Boolean(target?.isConnected),
+        rect: wrapper ? {
+          left: Number.parseFloat(wrapper.style.left) || 0,
+          top: Number.parseFloat(wrapper.style.top) || 0,
+          width: Number.parseFloat(wrapper.style.width) || 0,
+          height: Number.parseFloat(wrapper.style.height) || 0,
+        } : null,
+        animationActive: Boolean(animation || labelAnimation),
+        ringOpacity: ring?.style.opacity || "",
+        suppressed: suppressionTokens.size > 0,
+      };
+    },
+  });
+
+  const api = Object.freeze({ version: VERSION, bindDocument, syncScope, clearPresentation, showAction, clear, suppress, confirmSuppression, release, status });`,
+  );
   // Acceptance operations are answered before authorization, exactly because they model the *user*, not the agent.
   patch("background.js", '  let lineage;\n  try {\n    lineage = authorizeRequest(message);', '  if (op.startsWith("acceptance_") && typeof executeAcceptanceOp === "function") {\n    try { respond(id, { replayed: false, ok: true, result: await executeAcceptanceOp(op, message.params || {}) }); } catch (error) { denied(id, error); }\n    return;\n  }\n\n  let lineage;\n  try {\n    lineage = authorizeRequest(message);');
   fs.writeFileSync(path.join(outDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

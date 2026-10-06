@@ -53,7 +53,14 @@ function loadPresence(html = '<button id="target">Target</button>', { reducedMot
   };
   window.eval(PRESENCE_JS);
   const runtime = window.ZameryAgentPresenceV1.bindDocument("doc-1");
-  runtime.syncScope({ expected_document_id: "doc-1", enabled: true, scope_valid: true, control_revision: 1 });
+  runtime.syncScope({
+    expected_document_id: "doc-1",
+    enabled: true,
+    scope_valid: true,
+    control_revision: 1,
+    presentation_epoch: "test-epoch",
+    presentation_revision: 1,
+  });
   return {
     window,
     document: window.document,
@@ -110,6 +117,66 @@ describe("Firefox agent presence presentation", () => {
     const currentRaf = [...page.rafs.keys()].at(-1);
     page.runRaf(currentRaf);
     assert.equal(page.shadow().querySelector(".wrapper").hidden, true);
+  });
+
+  it("ignores stale scope sync and clear messages from an older presentation revision", () => {
+    const page = loadPresence();
+    const disabled = page.runtime.syncScope({
+      expected_document_id: "doc-1",
+      enabled: false,
+      scope_valid: false,
+      control_revision: 1,
+      presentation_epoch: "test-epoch",
+      presentation_revision: 3,
+    });
+    assert.equal(disabled.ok, true);
+
+    const staleSync = page.runtime.syncScope({
+      expected_document_id: "doc-1",
+      enabled: true,
+      scope_valid: true,
+      control_revision: 1,
+      presentation_epoch: "test-epoch",
+      presentation_revision: 2,
+    });
+    assert.equal(staleSync.ok, false);
+    assert.equal(staleSync.reason, "stale_presentation_revision");
+    assert.equal(page.runtime.status().enabled, false);
+    assert.equal(page.runtime.status().scope_valid, false);
+
+    const enabled = page.runtime.syncScope({
+      expected_document_id: "doc-1",
+      enabled: true,
+      scope_valid: true,
+      control_revision: 1,
+      presentation_epoch: "test-epoch",
+      presentation_revision: 4,
+    });
+    assert.equal(enabled.ok, true);
+    page.runtime.showAction(page.document.querySelector("#target"), "click");
+    assert.equal(page.shadow().querySelector(".wrapper").hidden, false);
+
+    const staleClear = page.runtime.clearPresentation({
+      expected_document_id: "doc-1",
+      control_revision: 1,
+      presentation_epoch: "test-epoch",
+      presentation_revision: 3,
+    });
+    assert.equal(staleClear.ok, false);
+    assert.equal(staleClear.reason, "stale_presentation_revision");
+    assert.equal(page.shadow().querySelector(".wrapper").hidden, false, "an old clear must not remove the newer cue");
+
+    const wrongDocumentClear = page.runtime.clearPresentation({
+      expected_document_id: "doc-old",
+      control_revision: 1,
+      presentation_epoch: "test-epoch",
+      presentation_revision: 5,
+    });
+    assert.equal(wrongDocumentClear.ok, false);
+    assert.equal(wrongDocumentClear.reason, "document_mismatch");
+    assert.equal(page.runtime.status().presentation_revision, 4, "a clear for another document must not advance presentation state");
+    assert.equal(page.shadow().querySelector(".wrapper").hidden, false, "a clear for another document must not remove the current cue");
+    page.runtime.clear();
   });
 
   it("keeps independent suppression tokens, never resurrects an old cue, and recovers on hard expiry", async () => {

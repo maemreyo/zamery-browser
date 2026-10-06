@@ -7,12 +7,13 @@ import { loadCompanion, pageScript, settle } from "./helpers/companion-harness.m
 import { makePng, pngDataUrl, quadrantPng } from "./helpers/png.mjs";
 
 const AUD = "audience-shots-aaaa";
+const NODE = { node_id: "n1", role: "button", name: "Go", tag: "button" };
 let sequence = 0;
 const rid = (prefix = "s") => `${prefix}-${++sequence}`;
 
-async function boot({ actions, png = quadrantPng(), viewport } = {}) {
+async function boot({ actions, png = quadrantPng(), viewport, snapshotNodes = [] } = {}) {
   const c = await loadCompanion({ tabs: [{ id: 1, url: "https://a.test/", title: "A", active: true }, { id: 2, url: "https://b.test/", active: false }] });
-  const page = pageScript({ snapshotNodes: [] });
+  const page = pageScript({ snapshotNodes });
   const baseHandler = page.handler;
   page.handler = async (message, tab) => {
     const reply = await baseHandler(message, tab);
@@ -170,6 +171,53 @@ describe("bounded screenshot capture", () => {
     assert.equal(c.state.captureCalls, undefined, "captureTab must not run after document replacement during the barrier");
   });
 
+  it("does not dispatch capture if authority is revoked during the final presence sync", async () => {
+    const { c, ask } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    let syncCount = 0;
+    let revoked = false;
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      const response = await originalHandler(message, tab);
+      if (message.type === "zamery_browser_firefox_presence_sync") {
+        syncCount += 1;
+        if (syncCount === 2 && !revoked) {
+          revoked = true;
+          await c.popup({ type: "zamery_browser_firefox_revoke" });
+        }
+      }
+      return response;
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, false);
+    assert.ok(
+      ["authorization_changed_before_capture", "authorization_changed_during_request"].includes(response.error.reason),
+      JSON.stringify(response.error),
+    );
+    assert.equal(c.state.captureCalls, undefined, "captureTab must not run after revoke during the final presentation sync");
+  });
+
+  it("does not dispatch capture if the origin changes during the final presence sync", async () => {
+    const { c, ask } = await boot();
+    const originalHandler = c.state.contentHandlers.get(1);
+    let syncCount = 0;
+    let changedOrigin = false;
+    c.state.contentHandlers.set(1, async (message, tab) => {
+      const response = await originalHandler(message, tab);
+      if (message.type === "zamery_browser_firefox_presence_sync") {
+        syncCount += 1;
+        if (syncCount === 2 && !changedOrigin) {
+          changedOrigin = true;
+          await c.browser.tabs.update(1, { url: "https://evil.test/" });
+        }
+      }
+      return response;
+    });
+    const response = await ask("screenshot_capture", { context_id: "tab:1" });
+    assert.equal(response.ok, false);
+    assert.equal(response.error.reason, "origin_changed_confirmation_required", JSON.stringify(response.error));
+    assert.equal(c.state.captureCalls, undefined, "captureTab must not run after an origin change during the final presentation sync");
+  });
+
   it("does not add a claim requirement when Take over happens during suppression confirmation", async () => {
     const { c, ask } = await boot();
     const originalHandler = c.state.contentHandlers.get(1);
@@ -188,7 +236,7 @@ describe("bounded screenshot capture", () => {
   });
 
   it("keeps suppression through Take over, Resume and a new action until the underlying capture settles", async () => {
-    const { c, ask, page } = await boot({ actions: ["inspect", "interact", "capture"] });
+    const { c, ask, page } = await boot({ actions: ["inspect", "interact", "capture"], snapshotNodes: [NODE] });
     let releaseCapture;
     const originalCapture = c.browser.tabs.captureTab;
     c.browser.tabs.captureTab = async (...args) => {
@@ -207,10 +255,12 @@ describe("bounded screenshot capture", () => {
 
     const snapshot = await ask("snapshot", { context_id: "tab:1", claim: true });
     const ref = snapshot.result.nodes[0]?.ref;
-    if (ref) {
-      const acted = await ask("act", { context_id: "tab:1", ref, action: "click" });
-      assert.equal(acted.ok, true, JSON.stringify(acted));
-    }
+    assert.ok(ref, "fixture must expose an actionable target");
+    const actsBefore = page.acts.length;
+    const acted = await ask("act", { context_id: "tab:1", ref, action: "click" });
+    assert.equal(acted.ok, true, JSON.stringify(acted));
+    assert.equal(page.acts.length, actsBefore + 1, "the new action must actually dispatch while capture is pending");
+    assert.equal(page.acts.at(-1).action, "click");
     assert.equal(page.suppressionTokens.size, 1, "a new action generation must remain suppressed during capture");
 
     releaseCapture();

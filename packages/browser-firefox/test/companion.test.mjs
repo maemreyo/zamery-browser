@@ -409,6 +409,7 @@ describe("human <-> agent control", () => {
     const { company, pages, ask } = await boot();
     await claimedRef(ask);
     assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).agent_presence_enabled, true);
+    const messagesBeforeLifecycle = pages[1].presenceMessages.length;
 
     const disabled = await company.popup({ type: "zamery_browser_firefox_set_agent_presence", enabled: false });
     assert.equal(disabled.agent_presence_enabled, false);
@@ -424,6 +425,21 @@ describe("human <-> agent control", () => {
 
     await company.popup({ type: "zamery_browser_firefox_resume" });
     assert.ok(pages[1].presenceClears.some((message) => message.reason === "resume"));
+
+    const lifecycleMessages = pages[1].presenceMessages.slice(messagesBeforeLifecycle);
+    assert.ok(lifecycleMessages.length >= 4);
+    for (const message of lifecycleMessages) {
+      assert.equal(message.expected_document_id, "doc-1");
+      assert.equal(typeof message.presentation_epoch, "string");
+      assert.ok(message.presentation_epoch.length > 0);
+      assert.ok(Number.isSafeInteger(message.presentation_revision) && message.presentation_revision > 0);
+    }
+    for (let index = 1; index < lifecycleMessages.length; index += 1) {
+      assert.ok(
+        lifecycleMessages[index].presentation_revision > lifecycleMessages[index - 1].presentation_revision,
+        "presentation messages for one document must be strictly monotonic",
+      );
+    }
   });
 
   it("requires a claim and a fresh observation before any write", async () => {

@@ -357,7 +357,7 @@ export function pageScript({
   onConfirmSuppression,
   onReleaseSuppression,
 } = {}) {
-  const page = { documentId, acts: [], interactionGeneration: 0, suppressionTokens: new Set(), presenceClears: [], presenceSyncs: [] };
+  const page = { documentId, acts: [], interactionGeneration: 0, suppressionTokens: new Set(), presenceClears: [], presenceSyncs: [], presenceMessages: [] };
   page.handler = async (message, tab) => {
     if (message.type === "zamery_browser_firefox_ping") {
       return {
@@ -384,10 +384,12 @@ export function pageScript({
     }
     if (message.type === "zamery_browser_firefox_presence_sync") {
       page.presenceSyncs.push(message);
+      page.presenceMessages.push(message);
       return { ok: agentPresenceReady, document_id: page.documentId };
     }
     if (message.type === "zamery_browser_firefox_presence_clear") {
       page.presenceClears.push(message);
+      page.presenceMessages.push(message);
       return { ok: agentPresenceReady, document_id: page.documentId };
     }
     if (message.type === "zamery_browser_firefox_overlay_suppress") {

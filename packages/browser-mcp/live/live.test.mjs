@@ -561,6 +561,187 @@ describe("live Firefox: screenshots as bounded artifacts", () => {
 });
 
 describe("live Firefox: agent action presentation and screenshot suppression", () => {
+  const presence = async (tabId) => (await live.user("presence_debug", { tab_id: tabId })).presence;
+  const setPresence = (enabled) => live.user("set_agent_presence", { enabled });
+  const setPresenceControl = (tabId, extra = {}) => live.user("presence_control", { tab_id: tabId, ...extra });
+  const targetRect = async (tabId, selector) => JSON.parse(await pageValue(tabId, `JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; })())`));
+  const assertRectNear = (actual, expected, label) => {
+    for (const key of ["left", "top", "width", "height"]) assert.ok(Math.abs(actual[key] - expected[key]) <= 2, `${label} ${key}: ${actual[key]} vs ${expected[key]}`);
+  };
+
+  it("keeps action semantics stable with presentation off/on and exposes only fixed labels for click/fill/type/key", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+
+    await setPresence(false);
+    let snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    let field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const disabled = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "overlay-off-secret" });
+    assert.equal(disabled.structuredContent.outcome, "completed", text(disabled));
+    assert.equal((await presence(tab.id)).cueVisible, false);
+
+    await setPresence(true);
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const enabled = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "overlay-on-secret" });
+    assert.equal(enabled.structuredContent.outcome, "completed", text(enabled));
+    assert.deepEqual(
+      { outcome: enabled.structuredContent.outcome, replayed: enabled.structuredContent.replayed },
+      { outcome: disabled.structuredContent.outcome, replayed: disabled.structuredContent.replayed },
+    );
+    let debug = await presence(tab.id);
+    assert.equal(debug.label, "AI · fill");
+    assert.equal(debug.targetId, "name");
+    assert.ok(!JSON.stringify(debug).includes("overlay-on-secret"));
+
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const noteRef = snap.structuredContent.nodes.find((node) => node.name === "Notes").ref;
+    const typed = await call("browser_type", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: noteRef, text: "typed-secret" });
+    assert.equal(typed.structuredContent.outcome, "completed", text(typed));
+    debug = await presence(tab.id);
+    assert.equal(debug.label, "AI · type");
+    assert.equal(debug.targetId, "note");
+    assert.ok(!JSON.stringify(debug).includes("typed-secret"));
+
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const keyed = await call("browser_key", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, key: "ArrowLeft" });
+    assert.equal(keyed.structuredContent.outcome, "completed", text(keyed));
+    debug = await presence(tab.id);
+    assert.equal(debug.label, "AI · key");
+    assert.equal(debug.targetId, "name");
+    assert.ok(!JSON.stringify(debug).includes("ArrowLeft"));
+
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const saveRef = snap.structuredContent.nodes.find((node) => node.name === "Save").ref;
+    const clicked = await call("browser_click", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: saveRef });
+    assert.equal(clicked.structuredContent.outcome, "completed", text(clicked));
+    debug = await presence(tab.id);
+    assert.equal(debug.label, "AI · click");
+    assert.equal(debug.targetId, "save");
+
+    await sleep(950);
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const unsupportedRef = snap.structuredContent.nodes.find((node) => node.name === "Save").ref;
+    const unsupported = await call("browser_type", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: unsupportedRef, text: "must-not-cue" });
+    assert.equal(unsupported.structuredContent.outcome, "not_started");
+    assert.equal((await presence(tab.id)).cueVisible, false);
+    note("agent-action-overlay-actions", { overlayOffOutcome: disabled.structuredContent.outcome, overlayOnOutcome: enabled.structuredContent.outcome, fixedLabels: ["click", "fill", "type", "key"], payloadExposed: false, unsupportedTargetCue: false });
+  });
+
+  it("tracks nested scroll and browser zoom, clears replacement targets, and keeps Take over/Resume authoritative", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    await pageValue(tab.id, `(() => {
+      const note = document.getElementById('note');
+      const box = document.createElement('div'); box.id = 'scrollbox';
+      Object.assign(box.style, { height: '90px', width: '420px', overflow: 'auto', border: '1px solid #ccc' });
+      const spacer = document.createElement('div'); spacer.style.height = '160px';
+      note.parentNode.insertBefore(box, note); box.append(spacer, note); note.style.display = 'block';
+      return true;
+    })()`);
+    let snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    let noteRef = snap.structuredContent.nodes.find((node) => node.name === "Notes").ref;
+    assert.equal((await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: noteRef, value: "geometry" })).structuredContent.outcome, "completed");
+    await sleep(80);
+    const before = await presence(tab.id);
+    assertRectNear(before.rect, await targetRect(tab.id, "#note"), "initial cue");
+
+    await pageValue(tab.id, "document.getElementById('scrollbox').scrollTop = 120; true");
+    await sleep(80);
+    const scrolled = await presence(tab.id);
+    assertRectNear(scrolled.rect, await targetRect(tab.id, "#note"), "nested-scroll cue");
+    assert.notEqual(scrolled.rect.top, before.rect.top);
+
+    try {
+      const zoomed = await live.user("set_zoom", { tab_id: tab.id, factor: 1.2 });
+      assert.ok(Math.abs(zoomed.zoom - 1.2) < 0.01);
+      await sleep(120);
+      assertRectNear((await presence(tab.id)).rect, await targetRect(tab.id, "#note"), "zoomed cue");
+    } finally {
+      await live.user("set_zoom", { tab_id: tab.id, factor: 1 }).catch(() => undefined);
+    }
+
+    await pageValue(tab.id, "(() => { const old = document.getElementById('note'); const replacement = old.cloneNode(true); old.replaceWith(replacement); return true; })()");
+    await sleep(80);
+    assert.equal((await presence(tab.id)).cueVisible, false, "replacement must not inherit the old cue");
+
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    noteRef = snap.structuredContent.nodes.find((node) => node.name === "Notes").ref;
+    assert.equal((await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: noteRef, value: "takeover" })).structuredContent.outcome, "completed");
+    assert.equal((await presence(tab.id)).cueVisible, true);
+    await live.user("takeover");
+    await sleep(40);
+    assert.equal((await presence(tab.id)).cueVisible, false);
+    await live.user("resume");
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    noteRef = snap.structuredContent.nodes.find((node) => node.name === "Notes").ref;
+    assert.equal((await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: noteRef, value: "resumed" })).structuredContent.outcome, "completed");
+    assert.equal((await presence(tab.id)).cueVisible, true);
+    await live.user("revoke");
+    await sleep(40);
+    assert.equal((await presence(tab.id)).cueVisible, false);
+    note("agent-action-overlay-lifecycle", { nestedScrollTracked: true, browserZoomTracked: true, replacementNotRetargeted: true, takeoverCleared: true, resumeWorked: true, revokeCleared: true });
+  });
+
+  it("runs reduced-motion and presentation-fault branches in real Firefox without changing mutation outcome", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    await setPresenceControl(tab.id, { force_reduced_motion: true });
+    let snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    let field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const reduced = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "reduced" });
+    assert.equal(reduced.structuredContent.outcome, "completed", text(reduced));
+    let debug = await presence(tab.id);
+    assert.equal(debug.cueVisible, true);
+    assert.equal(debug.animationActive, false);
+    assert.equal(debug.ringOpacity, "1");
+
+    await setPresenceControl(tab.id, { throw_animation: true });
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const faulted = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "fault-path" });
+    assert.equal(faulted.structuredContent.outcome, "completed", text(faulted));
+    assert.equal(await pageValue(tab.id, "document.getElementById('name').value"), "fault-path");
+    assert.equal((await presence(tab.id)).cueVisible, false, "presentation fault clears presentation only");
+
+    await setPresenceControl(tab.id);
+    snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const normal = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "normal-path" });
+    assert.deepEqual(
+      { outcome: faulted.structuredContent.outcome, replayed: faulted.structuredContent.replayed },
+      { outcome: normal.structuredContent.outcome, replayed: normal.structuredContent.replayed },
+    );
+    note("agent-action-overlay-reduced-fault", { reducedMotionStatic: true, animationStarted: false, faultOutcome: faulted.structuredContent.outcome, normalOutcome: normal.structuredContent.outcome, faultChangedMutation: false });
+  });
+
+  it("records the real top-layer limitation without claiming guaranteed visibility", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    await pageValue(tab.id, `(() => {
+      const dialog = document.createElement('dialog'); dialog.id = 'top-dialog';
+      dialog.innerHTML = '<label for="dialog-field">Dialog field</label><input id="dialog-field" name="dialog-field">';
+      document.body.append(dialog); dialog.showModal(); return true;
+    })()`);
+    const snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const field = snap.structuredContent.nodes.find((node) => node.name === "Dialog field").ref;
+    const acted = await call("browser_fill", { context_id: `tab:${tab.id}`, observation_id: snap.structuredContent.observation_id, ref: field, value: "top-layer" });
+    assert.equal(acted.structuredContent.outcome, "completed", text(acted));
+    const rect = JSON.parse(await pageValue(tab.id, `JSON.stringify((() => { const r = document.getElementById('dialog-field').getBoundingClientRect(); return { x: Math.max(0, Math.floor(r.x - 12)), y: Math.max(0, Math.floor(r.y - 36)), width: Math.ceil(r.width + 24), height: Math.ceil(r.height + 52) }; })())`));
+    const raw = await live.user("capture_raw", { tab_id: tab.id, rect });
+    const purplePixels = countAgentPurple(decodePng(Buffer.from(raw.data_url.split(",")[1], "base64")));
+    note("agent-action-overlay-top-layer", { dialogOpen: true, observedPurplePixels: purplePixels, guaranteedTopmost: false });
+  });
+
   it("shows the action cue in raw Firefox pixels but removes it from product screenshots", async () => {
     await reset();
     const tab = await openTab("/form", { active: true });
@@ -607,6 +788,50 @@ describe("live Firefox: agent action presentation and screenshot suppression", (
     const realTabs = (await live.user("tabs")).tabs;
     assert.equal(realTabs.find((entry) => entry.id === foreground.id).active, true, "background capture did not steal focus");
     note("agent-action-overlay-background", { screenshotClean: true, foregroundStayedActive: true });
+  });
+
+  it("keeps product pixels clean when a new action dispatches while capture suppression is pending", async () => {
+    await reset();
+    const tab = await openTab("/form", { active: true });
+    await live.user("activate_tab", { tab_id: tab.id });
+    await share([tab.id]);
+    const snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
+    const field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const rect = JSON.parse(await pageValue(tab.id, `JSON.stringify((() => { const r = document.getElementById('name').getBoundingClientRect(); return { x: Math.max(0, Math.floor(r.x + scrollX - 12)), y: Math.max(0, Math.floor(r.y + scrollY - 36)), width: Math.ceil(r.width + 24), height: Math.ceil(r.height + 52) }; })())`));
+
+    await live.user("capture_gate_arm");
+    const pendingShot = call("browser_screenshot", { context_id: `tab:${tab.id}`, format: "png", include_image: false, rect });
+    let released = false;
+    try {
+      let gate;
+      for (let index = 0; index < 100; index += 1) {
+        gate = await live.user("capture_gate_status");
+        if (gate.entered) break;
+        await sleep(20);
+      }
+      assert.equal(gate?.entered, true, "capture must reach the acceptance gate after suppression confirmation");
+
+      const acted = await call("browser_fill", {
+        context_id: `tab:${tab.id}`,
+        observation_id: snap.structuredContent.observation_id,
+        ref: field,
+        value: "Concurrent overlay",
+      });
+      assert.equal(acted.isError, undefined, text(acted));
+      assert.equal(await pageValue(tab.id, "document.getElementById('name').value"), "Concurrent overlay", "action dispatched while capture was pending");
+
+      const release = await live.user("capture_gate_release");
+      released = true;
+      assert.equal(release.entered, true);
+      const shot = await pendingShot;
+      assert.equal(shot.isError, undefined, text(shot));
+      const clean = decodePng(fs.readFileSync(shot.structuredContent.local_path));
+      const capturedPurple = countAgentPurple(clean);
+      assert.equal(capturedPurple, 0, `concurrent-action screenshot contained ${capturedPurple} overlay-like pixels`);
+      note("agent-action-overlay-concurrent", { actionDispatchedDuringCapture: true, screenshotPurplePixels: capturedPurple, screenshotClean: true });
+    } finally {
+      if (!released) await live.user("capture_gate_release").catch(() => undefined);
+    }
   });
 });
 

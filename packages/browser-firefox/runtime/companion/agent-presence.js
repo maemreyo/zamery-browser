@@ -16,6 +16,9 @@
   let enabled = true;
   let scopeValid = true;
   let controlRevision = 0;
+  let presentationEpoch = null;
+  let presentationRevision = 0;
+  const retiredPresentationEpochs = new Set();
   let actionGeneration = 0;
   let host = null;
   let wrapper = null;
@@ -191,10 +194,33 @@
         clear();
         for (const entry of suppressionTokens.values()) if (entry.timer != null) swallow(() => clearTimeout(entry.timer));
         suppressionTokens.clear();
+        presentationEpoch = null;
+        presentationRevision = 0;
+        retiredPresentationEpochs.clear();
       }
       documentIdentity = next;
     });
     return api;
+  }
+
+  function acceptPresentationMessage(input = {}) {
+    const epoch = typeof input.presentation_epoch === "string" ? input.presentation_epoch : "";
+    const revision = Number(input.presentation_revision);
+    if (!epoch || !Number.isSafeInteger(revision) || revision <= 0) {
+      return { ok: false, reason: "invalid_presentation_revision" };
+    }
+    if (retiredPresentationEpochs.has(epoch)) return { ok: false, reason: "stale_presentation_epoch" };
+    if (presentationEpoch && epoch !== presentationEpoch) {
+      retiredPresentationEpochs.add(presentationEpoch);
+      presentationEpoch = epoch;
+      presentationRevision = 0;
+    } else if (!presentationEpoch) {
+      presentationEpoch = epoch;
+    }
+    if (revision < presentationRevision) return { ok: false, reason: "stale_presentation_revision" };
+    const advanced = revision > presentationRevision;
+    presentationRevision = revision;
+    return { ok: true, advanced };
   }
 
   function syncScope(input = {}) {
@@ -202,13 +228,42 @@
       if (input.expected_document_id && input.expected_document_id !== documentIdentity) {
         return { ok: false, reason: "document_mismatch", document_id: documentIdentity };
       }
+      const presentation = acceptPresentationMessage(input);
+      if (!presentation.ok) return { ...presentation, document_id: documentIdentity, presentation_revision: presentationRevision };
       const nextRevision = Number(input.control_revision) || 0;
       const revisionChanged = nextRevision !== controlRevision;
       controlRevision = nextRevision;
       enabled = input.enabled !== false;
       scopeValid = input.scope_valid !== false;
       if (revisionChanged || !enabled || !scopeValid) clear();
-      return { ok: true, document_id: documentIdentity, enabled, scope_valid: scopeValid, control_revision: controlRevision };
+      return {
+        ok: true,
+        document_id: documentIdentity,
+        enabled,
+        scope_valid: scopeValid,
+        control_revision: controlRevision,
+        presentation_epoch: presentationEpoch,
+        presentation_revision: presentationRevision,
+      };
+    }) || { ok: false, reason: "presentation_error", document_id: documentIdentity };
+  }
+
+  function clearPresentation(input = {}) {
+    return swallow(() => {
+      if (input.expected_document_id !== documentIdentity) {
+        return { ok: false, reason: "document_mismatch", document_id: documentIdentity };
+      }
+      const presentation = acceptPresentationMessage(input);
+      if (!presentation.ok) return { ...presentation, document_id: documentIdentity, presentation_revision: presentationRevision };
+      if (Number.isFinite(Number(input.control_revision))) controlRevision = Number(input.control_revision);
+      clear();
+      return {
+        ok: true,
+        document_id: documentIdentity,
+        control_revision: controlRevision,
+        presentation_epoch: presentationEpoch,
+        presentation_revision: presentationRevision,
+      };
     }) || { ok: false, reason: "presentation_error", document_id: documentIdentity };
   }
 
@@ -300,12 +355,14 @@
       enabled,
       scope_valid: scopeValid,
       control_revision: controlRevision,
+      presentation_epoch: presentationEpoch,
+      presentation_revision: presentationRevision,
       action_generation: actionGeneration,
       suppressed: suppressionTokens.size > 0,
       suppression_count: suppressionTokens.size,
     };
   }
 
-  const api = Object.freeze({ version: VERSION, bindDocument, syncScope, showAction, clear, suppress, confirmSuppression, release, status });
+  const api = Object.freeze({ version: VERSION, bindDocument, syncScope, clearPresentation, showAction, clear, suppress, confirmSuppression, release, status });
   globalThis.ZameryAgentPresenceV1 = api;
 })();

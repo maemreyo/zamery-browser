@@ -242,11 +242,24 @@ async function captureScreenshot(params, message) {
     if (!sameCapturedDocument(before, preDispatch)) {
       throw newError("BROWSER_DOCUMENT_CHANGED", "the page changed while screenshot suppression was being confirmed", "document_changed_before_capture");
     }
+    // ensureContent() itself awaits presentation sync. Re-check the original authority lineage after that
+    // final await so revoke/expiry/rebind cannot reach captureTab through the presentation coordination gap.
+    if (!lineageCurrent(lineage)) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "authorization_changed_before_capture");
+    // Presentation sync may also observe a navigation and mark the tab's origin as pending without changing
+    // the binding lineage. Re-evaluate capture access synchronously from the already-fetched tab snapshot so
+    // pending-origin/scope changes cannot cross another await before captureTab dispatch.
+    contextAuthorizationCurrent(tabId, preDispatchAuthorization.tab, "capture");
 
     const options = { format, scale, rect };
     if (quality !== undefined) options.quality = quality;
     let timer;
-    const underlyingCapture = Promise.resolve().then(() => browser.tabs.captureTab(tabId, options));
+    let underlyingCapture;
+    try {
+      // Dispatch synchronously after the final checks; deferring through a microtask would reopen a revoke gap.
+      underlyingCapture = Promise.resolve(browser.tabs.captureTab(tabId, options));
+    } catch (error) {
+      underlyingCapture = Promise.reject(error);
+    }
     let dataUrl;
     try {
       dataUrl = await Promise.race([

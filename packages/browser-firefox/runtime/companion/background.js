@@ -75,12 +75,14 @@ let consentPersistedSeenAt = 0;
 const seenAudiences = new Map();
 const pendingOriginChanges = {};
 const interactionGenerations = new Map();
+const agentPresenceDocuments = new Map();
 let lastAgentMutationAt = 0;
 let agentActivationUntil = 0;
 let attention = null;
 let notificationsPreferred = false;
 let notificationsPermissionGranted = false;
 let agentPresenceEnabled = true;
+let agentPresencePresentationRevision = 0;
 
 /** The agent's own tab/window activation must not be mistaken for the user switching away. */
 function markAgentActivation() {
@@ -259,6 +261,7 @@ function clearCachesForAuthorityChange() {
   a1AssetRefs.clear();
   a1Transfers.clear();
   a1RequestContexts.clear();
+  agentPresenceDocuments.clear();
   for (const key of Object.keys(pendingOriginChanges)) delete pendingOriginChanges[key];
 }
 
@@ -498,6 +501,18 @@ function currentAudience() {
   return binding?.audienceId ?? null;
 }
 
+function contextAuthorizationCurrent(tabId, tab, action = "inspect") {
+  ensureAuthorityCurrent();
+  if (!binding) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "rebind_required");
+  const verdict = Policy.evaluateTabAccess({ scope: binding.scope, actions: binding.actions, pendingOrigins: pendingOriginChanges }, tab, action);
+  if (!verdict.ok) {
+    // Leaving the authorized group ends group-derived access for good: re-entering does not restore it.
+    if (verdict.reason === "left_authorized_group") removeTabFromScope(tabId, "left_group");
+    throw denial(verdict.code, verdict.reason);
+  }
+  return { tabId, tab };
+}
+
 async function contextAuthorization(contextId, action = "inspect") {
   const tabId = tabIdFromContext(contextId);
   ensureAuthorityCurrent();
@@ -507,13 +522,7 @@ async function contextAuthorization(contextId, action = "inspect") {
     if (binding.scope.tabs[String(tabId)]) removeTabFromScope(tabId, "tab_closed");
     throw newError("BROWSER_CONTEXT_GONE", "Firefox tab is no longer available", "tab_closed");
   }
-  const verdict = Policy.evaluateTabAccess({ scope: binding.scope, actions: binding.actions, pendingOrigins: pendingOriginChanges }, tab, action);
-  if (!verdict.ok) {
-    // Leaving the authorized group ends group-derived access for good: re-entering does not restore it.
-    if (verdict.reason === "left_authorized_group") removeTabFromScope(tabId, "left_group");
-    throw denial(verdict.code, verdict.reason);
-  }
-  return { tabId, tab };
+  return contextAuthorizationCurrent(tabId, tab, action);
 }
 
 function removeTabFromScope(tabId, reason) {
@@ -535,6 +544,7 @@ function removeTabFromScope(tabId, reason) {
 }
 
 function dropTabCaches(tabId) {
+  agentPresenceDocuments.delete(tabId);
   for (const [ref, asset] of assetV1Refs) if (asset.tab_id === tabId) assetV1Refs.delete(ref);
   for (const [handle, transfer] of assetV1Transfers) if (transfer.tab_id === tabId) assetV1Transfers.delete(handle);
   for (const [requestId, target] of assetV1RequestContexts) if (target.tab_id === tabId) assetV1RequestContexts.delete(requestId);
@@ -959,21 +969,49 @@ async function ensureAgentPresenceOnExistingContent(tabId, ping) {
 
 async function syncAgentPresence(tabId, ping) {
   if (!ping?.agent_presence_v1_ready || !ping.document_id) return;
+  const presentationRevision = ++agentPresencePresentationRevision;
+  agentPresenceDocuments.set(tabId, {
+    documentId: ping.document_id,
+    browserDocumentId: ping.browser_document_id || null,
+  });
   await browser.tabs.sendMessage(tabId, {
     type: "zamery_browser_firefox_presence_sync",
     expected_document_id: ping.document_id,
     enabled: agentPresenceEnabled,
     scope_valid: agentPresenceScopeValid(tabId),
     control_revision: control.claimGeneration,
+    presentation_epoch: browserRunEpoch,
+    presentation_revision: presentationRevision,
   }, primaryDocumentTarget(ping.browser_document_id)).catch(() => undefined);
 }
 
 function clearAgentPresenceForTabs(tabIds, reason) {
+  const presentationRevision = ++agentPresencePresentationRevision;
+  const controlRevision = control.claimGeneration;
   for (const tabId of tabIds || []) {
-    void browser.tabs.sendMessage(tabId, {
-      type: "zamery_browser_firefox_presence_clear",
-      reason: String(reason || "control_changed"),
-    }, PRIMARY_DOCUMENT_TARGET).catch(() => undefined);
+    const knownDocument = agentPresenceDocuments.get(tabId);
+    void (async () => {
+      let document = knownDocument;
+      if (!document?.documentId) {
+        const ping = await browser.tabs.sendMessage(
+          tabId,
+          { type: "zamery_browser_firefox_ping" },
+          PRIMARY_DOCUMENT_TARGET,
+        ).catch(() => null);
+        if (ping?.document_id) {
+          document = { documentId: ping.document_id, browserDocumentId: ping.browser_document_id || null };
+        }
+      }
+      if (!document?.documentId) return;
+      await browser.tabs.sendMessage(tabId, {
+        type: "zamery_browser_firefox_presence_clear",
+        reason: String(reason || "control_changed"),
+        expected_document_id: document.documentId,
+        control_revision: controlRevision,
+        presentation_epoch: browserRunEpoch,
+        presentation_revision: presentationRevision,
+      }, primaryDocumentTarget(document.browserDocumentId)).catch(() => undefined);
+    })();
   }
 }
 
