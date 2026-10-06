@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Stable `v0.2.2` artifacts accepted; npm `latest` promotion pending.** Stable npm artifacts are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. The remaining distribution task is to enable `Allow npm dist-tag` for the `publish.yml` trusted publisher on each package and rerun the publish workflow so unversioned installs resolve to these stable versions. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
+**Stable `v0.2.2` accepted.** Stable npm artifacts are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. npm `latest` resolves to the stable tuple. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
 
 ## What exists (by layer)
 
@@ -77,7 +77,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-Pinned stable artifacts, the GitHub release, signed companion, clean distribution/install, live Firefox behavior, exact XPI/source compatibility, AMO lint/signing, unit/contract/integration tests and MCP tests are all accepted. One public-distribution UX gate remains: npm `latest` must be moved to the stable tuple. The release workflow now uses npm's native OIDC dist-tag flow with npm 11.21.0; npm rejected the first promotion because the trusted publisher does not yet have the separately-scoped `Allow npm dist-tag` permission.
+No remaining stable release gate is open. Pinned stable artifacts, the GitHub release, signed companion, clean distribution/install, live Firefox behavior, exact XPI/source compatibility, AMO lint/signing, unit/contract/integration tests, MCP tests and npm `latest` aliases are all accepted.
 
 ## Known limitations of the current release scope
 

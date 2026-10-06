@@ -112,12 +112,3 @@ jobs:
           publish_one '@zamery/pi-browser' '0.2.1' 'zamery-pi-browser-*.tgz'
           publish_one '@zamery/browser-firefox' '0.2.1' 'zamery-browser-firefox-*.tgz'
           publish_one '@zamery/browser-mcp' '0.1.0' 'zamery-browser-mcp-*.tgz'
-
-      - name: Promote stable package versions to latest
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm dist-tag add '@zamery/browser-provider@0.2.2' latest
-          npm dist-tag add '@zamery/pi-browser@0.2.1' latest
-          npm dist-tag add '@zamery/browser-firefox@0.2.1' latest
-          npm dist-tag add '@zamery/browser-mcp@0.1.0' latest
