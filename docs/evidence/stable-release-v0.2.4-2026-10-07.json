@@ -1,0 +1,54 @@
+{
+  "at": "2026-10-07T00:04:33+07:00",
+  "status": "STABLE_ACCEPTED_PENDING_GITHUB_RELEASE",
+  "release": {
+    "tag": "v0.2.4",
+    "browser_provider": "0.2.3",
+    "browser_firefox": "0.2.3",
+    "browser_mcp": "0.1.2",
+    "pi_browser": "0.2.2",
+    "companion": "0.2.6",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "npm": {
+    "browser_firefox_version": "0.2.3",
+    "browser_firefox_shasum": "5f4f82c22a8043cab447abd9d606d7c8eff30601",
+    "browser_firefox_integrity": "sha512-WH4RVGhHnIc+HfGS2A4CvqVMR1kkkILM5rS1TxYp0mktVv9N/vZLbmP5s404lSblvCyHDpmN6/KBqWSXZFr/7g==",
+    "publish_workflow_run_id": 37499565258,
+    "status": "PASS"
+  },
+  "amo": {
+    "version_id": 6548018,
+    "file_id": 5092157,
+    "xpi_sha256": "7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0",
+    "companion_source_sha256": "b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9",
+    "mozilla_signature_verified": true,
+    "status": "PASS"
+  },
+  "signed_real_profile_acceptance": {
+    "firefox": "157.0",
+    "profile": "default-release",
+    "authorization": "PASS; fixed 30-day background grant over 5 explicitly shared tabs",
+    "snapshot": "PASS",
+    "benign_write": "PASS",
+    "screenshot_capture": "PASS",
+    "status": "PASS"
+  },
+  "source_acceptance": {
+    "browser_firefox_tests": "232/232 PASS",
+    "browser_mcp_tests": "23/23 PASS",
+    "live_firefox": "31/31 PASS",
+    "pnpm_verify": "PASS",
+    "overlay_capture": "PASS; raw cue 1941 pixels; product and concurrent-action screenshots 0 cue pixels"
+  },
+  "clean_distribution_acceptance": {
+    "status": "PASS",
+    "github_actions_run_id": 37500599757,
+    "head_sha": "c8ae281342babeac24d8332ef1a2df8380dfb063",
+    "note": "Exact published npm tuple and Mozilla-signed Companion 0.2.6 installed and verified on the clean GitHub-hosted macOS runner."
+  },
+  "remaining_release_gates": [
+    "Create the stable GitHub v0.2.4 release, then record its final tag/release metadata."
+  ]
+}
