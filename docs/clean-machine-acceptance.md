@@ -8,12 +8,12 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 
 | Item | Value |
 | --- | --- |
-| `@zamery/browser-provider` | `0.2.2-rc.1` |
-| `@zamery/browser-firefox` | `0.2.1-rc.1` |
-| `@zamery/browser-mcp` | `0.1.0-rc.2` |
-| Signed XPI | `f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3` |
-| Companion | `0.2.0`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
-| Release git SHA | `b91c1a263bd5d3c09f21e753cba226d242fb380d` |
+| `@zamery/browser-provider` | `0.2.2-rc.2` |
+| `@zamery/browser-firefox` | `0.2.1-rc.2` |
+| `@zamery/browser-mcp` | `0.1.0-rc.3` |
+| Signed XPI | **pending** — must be a Mozilla-signed `0.2.1` artifact matching the release tuple |
+| Companion | `0.2.1`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
+| Release git SHA | fill from the final clean release commit |
 | macOS / arch | record: `sw_vers`, `uname -m` |
 | Firefox | record the version (≥ 142) |
 | Node | record `node -v` (≥ 22.19 < 25), and the **absolute path** that `which node` prints |
@@ -25,15 +25,15 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 2. Install Firefox (release channel) and Node (22 or 24) and Codex. Launch Firefox once and **log in to one real site** (an account you can safely use, e.g. a throwaway account) so the profile has a real session. Open a second tab with another logged-in site and a third with an unrelated page.
 3. Copy the signed XPI to the machine and verify it:
    ```bash
-   shasum -a 256 f82d5bdb37964220aafe-0.2.0.xpi    # must equal 956e4b8e…65c3
-   unzip -l f82d5bdb37964220aafe-0.2.0.xpi | grep -E 'mozilla.rsa|manifest.json'
+   shasum -a 256 <signed-0.2.1.xpi>    # must equal the SHA-256 recorded by release:tuple
+   unzip -l <signed-0.2.1.xpi> | grep -E 'mozilla.rsa|manifest.json'
    ```
 
 ## 2. Install the pinned packages (no tags, no repo)
 
 ```bash
 mkdir ~/zamery-rc && cd ~/zamery-rc && npm init -y
-npm i --save-exact @zamery/browser-provider@0.2.2-rc.1 @zamery/browser-firefox@0.2.1-rc.1 @zamery/browser-mcp@0.1.0-rc.2
+npm i --save-exact @zamery/browser-provider@0.2.2-rc.2 @zamery/browser-firefox@0.2.1-rc.2 @zamery/browser-mcp@0.1.0-rc.3
 npm ls --all | grep zamery            # exact versions, no duplicates
 npx zamery-browser-firefox setup --dry-run
 npx zamery-browser-firefox setup
@@ -46,7 +46,7 @@ Record the doctor output. Expected: no `fail` other than "no live session".
 
 1. In Firefox open the XPI (File → Open File… or drag it into the window) and accept the permission prompt. Record the permissions shown (all-site access, tabs, tab groups).
 2. Restart Firefox **once** (setup never does it for you).
-3. `npx zamery-browser-firefox doctor` again. Expected: `Live handshake OK` with the Firefox version, companion `0.2.0`, protocol compatible, access `revoked`; the add-on appears as signed in the profile registry line.
+3. `npx zamery-browser-firefox doctor` again. Expected: `Live handshake OK` with the Firefox version, companion `0.2.1`, protocol compatible, access `revoked`; the add-on appears as signed in the profile registry line.
 
 ## 4. Codex + recipe
 
@@ -57,7 +57,7 @@ Record the doctor output. Expected: no `fail` other than "no live session".
    (The tarball ships `codex/`; if it does not, record a packaging bug.)
 2. Register the server with the **pinned** package:
    ```bash
-   codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@0.1.0-rc.2
+   codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@0.1.0-rc.3
    ```
 3. Start Codex. Ask: *"Call browser_status."* Expected: connected, access revoked, instructions to share from the panel. Record initialize time (Codex shows tool availability within its 10 s startup limit).
 

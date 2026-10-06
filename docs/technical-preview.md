@@ -64,7 +64,7 @@ Consequence: preview acceptance is tied to a tested **Codex surface/build + inst
 
 The previously accepted tuple used npm `@zamery/browser-provider@0.2.2-rc.1`, `@zamery/browser-firefox@0.2.1-rc.1`, `@zamery/browser-mcp@0.1.0-rc.2` and signed companion `0.2.0` (`f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3`, source hash `f07ffd81cd9bd04788291c672007c188e5fe618843a1995fc8f076cdf063e56f`). Background automation changes provider/MCP contracts and companion runtime, so that tuple is now a historical baseline only.
 
-Current source candidate: companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. `pnpm release:tuple` on the dirty implementation tree reports companion source SHA-256 `0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af` and no signed XPI. Before a new preview candidate is cut, the affected npm packages need new RC versions (`@zamery/browser-provider`, `@zamery/browser-firefox`, and `@zamery/browser-mcp`) and the final tuple must be regenerated from the clean commit with the signed `0.2.1` XPI SHA-256. No npm package or XPI was published by the background-automation implementation slice.
+Current release candidate: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/browser-firefox@0.2.1-rc.2`, `@zamery/browser-mcp@0.1.0-rc.3`, companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. The companion source SHA-256 is `0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af`. The final clean release tuple must record the release commit plus the Mozilla-signed `0.2.1` XPI SHA-256 before GO is claimed.
 
 ## What blocks GO
 
