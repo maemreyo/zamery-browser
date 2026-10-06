@@ -69,13 +69,12 @@ The previously accepted tuple used npm `@zamery/browser-provider@0.2.2-rc.1`, `@
 
 Previous accepted background-control tuple: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/browser-firefox@0.2.1-rc.2`, `@zamery/browser-mcp@0.1.0-rc.3`, companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. Those npm RCs were published under dist-tag `preview`, fresh-registry smoke passed, and the signed XPI/source tuple was verified. Durable historical evidence: `docs/evidence/background-release-2026-10-06.json`.
 
-Attention/auth UX candidate: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. Until fresh npm publish/smoke, AMO signing and real Firefox acceptance are recorded, these versions identify the candidate source rather than completed release evidence.
+Attention/auth UX candidate: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. The exact npm RC tuple is published under dist-tag `preview` and fresh-registry smoke passes. AMO companion `0.2.2` is submitted and pending Mozilla review; signed-artifact verification and real-profile attention/auth acceptance remain outstanding. Durable current evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
 
 ## What blocks GO
 
-1. Publish/smoke the exact attention/auth UX npm RC tuple.
-2. Obtain and verify a fresh Mozilla-signed companion `0.2.2` XPI; the signed `0.2.1` artifact cannot be reused.
-3. Run the attention/auth UX scenarios against the fresh signed XPI on the real Firefox profile and record durable evidence.
+1. Obtain and verify a fresh Mozilla-signed companion `0.2.2` XPI; the signed `0.2.1` artifact cannot be reused. AMO submission is currently pending Mozilla review.
+2. Run the attention/auth UX scenarios against the fresh signed XPI on the real Firefox profile and record durable evidence.
 
 The clean-machine macOS gate is not in this blocking list because the operator explicitly waived it on 2026-10-06. That exception does not convert the gate into a PASS.
 
