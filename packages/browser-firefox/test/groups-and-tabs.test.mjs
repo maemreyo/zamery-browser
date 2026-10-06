@@ -86,6 +86,38 @@ describe("group grant and read (membership_snapshot is the default)", () => {
     assert.equal((await ask("snapshot", { context_id: "tab:3" })).ok, true);
   });
 
+  it("Manage Access can exclude a follow-group tab permanently for this binding and remove a group without affecting direct tabs", async () => {
+    const { c, ask } = await boot({ groupPolicy: "follow_group", grantTabs: [7] });
+    const before = await popupStatus(c);
+    const handle = before.scope_groups[0].handle;
+
+    const exclude = await c.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [1, 7],
+      group_handles: [handle],
+      actions: [...before.actions],
+      control_mode: before.control_mode,
+    });
+    assert.equal(exclude.ok, true, JSON.stringify(exclude));
+    assert.equal((await ask("snapshot", { context_id: "tab:2" })).error.reason, "outside_scope");
+    await c.events.tabsOnUpdated.fire(2, { groupId: 9 }, c.tabs.get(2));
+    await settle(60);
+    assert.equal((await ask("snapshot", { context_id: "tab:2" })).error.reason, "outside_scope", "follow_group does not re-add a user-excluded tab");
+
+    const removeGroup = await c.popup({
+      type: "zamery_browser_firefox_manage_access",
+      tab_ids: [7],
+      group_handles: [],
+      actions: [...exclude.actions],
+      control_mode: exclude.control_mode,
+    });
+    assert.equal(removeGroup.ok, true, JSON.stringify(removeGroup));
+    assert.equal(removeGroup.scope_kind, "tabs");
+    assert.equal((await ask("snapshot", { context_id: "tab:1" })).error.reason, "outside_scope");
+    assert.equal((await ask("snapshot", { context_id: "tab:7" })).ok, true);
+    assert.deepEqual((await ask("group_list")).result.groups, []);
+  });
+
   it("follow_group never absorbs a tab the agent moved in, and the agent cannot import unauthorized tabs", async () => {
     const { c, ask } = await boot({ groupPolicy: "follow_group" });
     const [group] = (await ask("group_list")).result.groups;

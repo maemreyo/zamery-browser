@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Not a technical preview yet (NO-GO to publish).** The implementation of P0 and almost all of P1 exists and is covered by tests at every layer, including a live run against a real Firefox 157. The current companion `0.2.1` is Mozilla-signed and its source-compatible XPI has been verified. The signed companion also passed a run against the user's real, already-authenticated Firefox profile with explicit tab scoping and an outside-scope denial. What is *missing* is a clean-machine install of the matching published packages. Do not publish or announce this candidate until that gate passes for the same release-candidate tuple.
+**Attention/auth UX release candidate in progress.** The clean-machine macOS acceptance gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`). This is a release exception, not a PASS: community users should treat clean-machine installation as unverified until it is measured separately. The previous signed companion `0.2.1` and its authenticated-profile acceptance remain historical evidence only because this branch changes companion runtime source. This candidate can advance without the clean-machine gate, but it still requires a fresh signed `0.2.2` XPI, matching package tuple, and real Firefox acceptance before release evidence is complete.
 
 ## What exists (by layer)
 
@@ -25,11 +25,11 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Acceptance matrix (section 18 of the validation review)
 
-Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (blocked on something listed below).
+Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (blocked on something listed below) · WAIVED = explicitly skipped by operator and not claimed as proven.
 
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
-| 1 | Clean macOS install from published pinned packages + signed XPI | ❌ | Signed XPI is available; only a temp-prefix install has been done. Needs the full runbook on a clean macOS machine. |
+| 1 | Clean macOS install from published pinned packages + signed XPI | WAIVED | `WAIVED_BY_OPERATOR_2026-10-06`. This gate was intentionally skipped for this operator-authorized preview release. No clean-machine PASS is claimed. |
 | 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.1` on the user's `default-release` profile preserved the existing authenticated teacher session. After the user scoped access to two Zamery Center tabs, a direct snapshot of a previously known unshared tab failed with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope`. Evidence: `docs/evidence/real-profile-acceptance-2026-10-06.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
@@ -43,7 +43,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
 | 13 | Cached replay after revoke denied | ✅ | Companion VM (same-id snapshot replay after revoke is the reproduced F02 probe, now prevented). |
 | 14 | Multi-client / profile isolation | 🟡 | Real host tests: audience isolation, per-profile journals, single-writer lock. Two simultaneous real Firefox profiles were not run. |
-| 15 | Signed XPI/source compatibility | ✅ | AMO version `6545949` produced `f82d5bdb37964220aafe-0.2.1.xpi`, SHA-256 `06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce`. `pnpm release:tuple --xpi <file>` verified companion `0.2.1`, source SHA `0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af`, and a Mozilla signature. |
+| 15 | Signed XPI/source compatibility | ❌ | Companion source is now `0.2.2`; the signed `0.2.1` XPI (AMO version `6545949`, SHA-256 `06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce`) is historical evidence only. A fresh `0.2.2` signing result must be verified with `pnpm release:tuple --xpi <file>`. |
 | 16 | Mismatched protocol fails closed | ✅ | Host + companion VM + doctor tests; a protocol-1 companion with a protocol-2 host is rejected for every op but `status`. |
 
 ## Codex runs (real Codex CLI 0.160.0, MCP server over stdio)
@@ -65,11 +65,17 @@ Consequence: preview acceptance is tied to a tested **Codex surface/build + inst
 
 The previously accepted tuple used npm `@zamery/browser-provider@0.2.2-rc.1`, `@zamery/browser-firefox@0.2.1-rc.1`, `@zamery/browser-mcp@0.1.0-rc.2` and signed companion `0.2.0` (`f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3`, source hash `f07ffd81cd9bd04788291c672007c188e5fe618843a1995fc8f076cdf063e56f`). Background automation changes provider/MCP contracts and companion runtime, so that tuple is now a historical baseline only.
 
-Current release candidate: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/browser-firefox@0.2.1-rc.2`, `@zamery/browser-mcp@0.1.0-rc.3`, companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. All three npm RCs are published under dist-tag `preview` and a fresh-registry install of the exact versions passes. Release commit: `70835abbd3f1dfc5722062813a3d003066f1658a`. Companion source SHA-256: `0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af`. AMO version `6545949` was reviewed at `2026-10-06T02:16:21Z`; signed XPI `f82d5bdb37964220aafe-0.2.1.xpi` has SHA-256 `06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce`, and `release:tuple` verifies its Mozilla signature. Durable release evidence: `docs/evidence/background-release-2026-10-06.json`.
+Previous accepted background-control tuple: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/browser-firefox@0.2.1-rc.2`, `@zamery/browser-mcp@0.1.0-rc.3`, companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. Those npm RCs were published under dist-tag `preview`, fresh-registry smoke passed, and the signed XPI/source tuple was verified. Durable historical evidence: `docs/evidence/background-release-2026-10-06.json`.
+
+Attention/auth UX candidate: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. Until fresh npm publish/smoke, AMO signing and real Firefox acceptance are recorded, these versions identify the candidate source rather than completed release evidence.
 
 ## What blocks GO
 
-1. A clean-machine install of the matching published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
+1. Publish/smoke the exact attention/auth UX npm RC tuple.
+2. Obtain and verify a fresh Mozilla-signed companion `0.2.2` XPI; the signed `0.2.1` artifact cannot be reused.
+3. Run the attention/auth UX scenarios against the fresh signed XPI on the real Firefox profile and record durable evidence.
+
+The clean-machine macOS gate is not in this blocking list because the operator explicitly waived it on 2026-10-06. That exception does not convert the gate into a PASS.
 
 ## Known limitations of the preview scope
 
@@ -78,6 +84,7 @@ Current release candidate: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/brows
 - `tabs.captureTab` has no abort; the encoded-size limit is enforced after Firefox has produced the data URL.
 - The consumer id is a routing key, not an authenticated identity (same-OS-user trust boundary).
 - A page-opened popup is never auto-shared; the user shares it explicitly.
+- OS notifications are optional. If permission is absent/revoked or Firefox cannot open the popup from a notification click, the toolbar badge remains the fallback and the user opens the panel manually.
 
 ## Deferred (P2/P3, not part of the preview)
 

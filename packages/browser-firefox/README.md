@@ -33,6 +33,7 @@ The package exports both V1 and V2 provider factories:
 
 `FirefoxBrowserProviderV2` also implements, as separate versioned interfaces from `@zamery/browser-provider`:
 
+- `BrowserAttentionProviderV1` — a bounded `requestAttention({ kind: "access" })` path that may raise a Firefox badge/optional notification but cannot grant or widen access.
 - `BrowserAuthorizationProviderV1` — scope, expiry and restart status (`authorizationDetail`).
 - `BrowserControlProviderV1` — claim, hand-off requests and `mutationStatus`.
 - `BrowserTabProviderV1` — create/navigate/reload/activate/close-owned tabs.
@@ -56,6 +57,8 @@ npx @zamery/browser-firefox doctor            # non-mutating health report (--js
 ## Firefox companion
 
 The Firefox path requires the Mozilla-signed **Zamery Browser Companion** and the local Native Messaging host. The companion is currently signed/unlisted rather than a searchable public AMO listing.
+
+The companion keeps attention separate from authority. Pre-auth access requests, credential hand-off, resume requests, origin confirmation and live rebind waits can raise a toolbar badge. OS notifications are optional and only enabled from an explicit popup gesture; notification clicks only focus Firefox/open the panel and never grant, Resume or confirm a site. The popup's **Manage access** action can only reduce an existing grant; expansion goes through the explicit Share flow.
 
 See the repository's [Firefox setup guide](https://github.com/maemreyo/zamery-browser/blob/main/docs/firefox-setup.md) for installation and authorization.
 

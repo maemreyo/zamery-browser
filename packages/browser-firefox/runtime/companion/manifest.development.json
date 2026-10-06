@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion (Development)",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Development identity for the Zamery browser companion canary.",
   "browser_specific_settings": {
     "gecko": {
@@ -22,6 +22,9 @@
     "storage",
     "tabGroups",
     "tabs"
+  ],
+  "optional_permissions": [
+    "notifications"
   ],
   "incognito": "not_allowed",
   "background": {

@@ -1,6 +1,9 @@
 const HOST_NAME = "com.zamery.browser_firefox";
 const PROTOCOL_VERSION = 2;
 const CONSENT_STORAGE_KEY = "zameryBrowserFirefoxConsentV1";
+const ATTENTION_PREF_STORAGE_KEY = "zameryBrowserFirefoxAttentionPreferencesV1";
+const ATTENTION_NOTIFICATION_ID = "zamery-browser-attention";
+const ATTENTION_TTL_MS = 5 * 60 * 1000;
 const MAX_COMPLETED_REQUESTS = 512;
 const MAX_SEEN_AUDIENCES = 16;
 const SEEN_AUDIENCE_TTL_MS = 10 * 60 * 1000;
@@ -73,6 +76,9 @@ const pendingOriginChanges = {};
 const interactionGenerations = new Map();
 let lastAgentMutationAt = 0;
 let agentActivationUntil = 0;
+let attention = null;
+let notificationsPreferred = false;
+let notificationsPermissionGranted = false;
 
 /** The agent's own tab/window activation must not be mistaken for the user switching away. */
 function markAgentActivation() {
@@ -101,6 +107,128 @@ function denial(code, reason, message) {
 
 function originForUrl(url) {
   return Policy.originForUrl(url);
+}
+
+// ---- user attention -------------------------------------------------------------------------
+
+function attentionPresentation(reason) {
+  switch (reason) {
+    case "access_requested": return { badge: "?", title: "A local agent is requesting access", body: "A local agent wants browser access" };
+    case "rebind_required": return { badge: "↻", title: "Choose tabs to share again", body: "Choose tabs to share again" };
+    case "credential_field": return { badge: "!", title: "Agent needs your input", body: "Zamery Browser needs your input" };
+    case "resume_requested": return { badge: "!", title: "Agent is ready to continue", body: "Zamery Browser needs your input" };
+    case "origin_confirmation_required": return { badge: "!", title: "A shared tab needs your confirmation", body: "A shared tab needs your confirmation" };
+    default: return { badge: "!", title: "Agent needs your input", body: "Zamery Browser needs your input" };
+  }
+}
+
+function attentionCurrent() {
+  if (attention && attention.expiresAt <= Date.now()) {
+    attention = null;
+    void syncAttentionUi(false);
+  }
+  return attention;
+}
+
+async function refreshNotificationPermission() {
+  try {
+    notificationsPermissionGranted = Boolean(
+      typeof browser.permissions?.contains === "function"
+      && await browser.permissions.contains({ permissions: ["notifications"] }),
+    );
+  } catch {
+    notificationsPermissionGranted = false;
+  }
+  return notificationsPermissionGranted;
+}
+
+async function loadAttentionPreferences() {
+  try {
+    const stored = await browser.storage.local.get(ATTENTION_PREF_STORAGE_KEY);
+    notificationsPreferred = stored?.[ATTENTION_PREF_STORAGE_KEY]?.notify === true;
+  } catch {
+    notificationsPreferred = false;
+  }
+  await refreshNotificationPermission();
+}
+
+async function persistAttentionPreferences() {
+  try {
+    await browser.storage.local.set({ [ATTENTION_PREF_STORAGE_KEY]: { notify: notificationsPreferred } });
+  } catch {}
+}
+
+async function syncAttentionUi(shouldNotify = false) {
+  const current = attentionCurrent();
+  const view = current ? attentionPresentation(current.reason) : null;
+  try { await browser.browserAction?.setBadgeText?.({ text: view?.badge || "" }); } catch {}
+  try { await browser.browserAction?.setTitle?.({ title: view?.title || "Zamery Browser" }); } catch {}
+
+  if (!current) {
+    try { await browser.notifications?.clear?.(ATTENTION_NOTIFICATION_ID); } catch {}
+    return;
+  }
+  if (!shouldNotify || !notificationsPreferred) return;
+  if (!await refreshNotificationPermission()) return;
+  if (typeof browser.notifications?.create !== "function") return;
+  const options = {
+    type: "basic",
+    title: view.title,
+    message: view.body,
+  };
+  // Firefox does not implement notifications.update(). Reusing the same id clears the
+  // previous notification from this extension before creating the new one. Logical
+  // duplicates never reach this branch because setAttention() calls syncAttentionUi(false).
+  try { await browser.notifications.create(ATTENTION_NOTIFICATION_ID, options); } catch {}
+}
+
+function setAttention(reason, options = {}) {
+  const now = Date.now();
+  const existing = attentionCurrent();
+  const audienceId = options.audienceId || null;
+  const tabId = Number.isInteger(options.tabId) ? options.tabId : null;
+  if (existing && existing.reason === reason && existing.audienceId === audienceId && existing.tabId === tabId) {
+    existing.expiresAt = now + ATTENTION_TTL_MS;
+    void syncAttentionUi(false);
+    return "already_pending";
+  }
+  attention = { reason, audienceId, tabId, createdAt: now, expiresAt: now + ATTENTION_TTL_MS };
+  void syncAttentionUi(true);
+  return "requested";
+}
+
+function clearAttention() {
+  if (!attention) return;
+  attention = null;
+  void syncAttentionUi(false);
+}
+
+function attentionTabIdFromControl() {
+  const match = /^tab:(\d+)$/.exec(String(control.claimedContextId || ""));
+  return match ? Number(match[1]) : null;
+}
+
+async function focusAttentionUi() {
+  const current = attentionCurrent();
+  let windowId = null;
+  const tabId = current?.tabId;
+  if (Number.isInteger(tabId) && binding?.scope?.tabs?.[String(tabId)] && !pendingOriginChanges[String(tabId)]) {
+    const tab = await browser.tabs.get(tabId).catch(() => null);
+    if (tab && !tab.incognito) {
+      windowId = tab.windowId;
+      await browser.windows.update(windowId, { focused: true }).catch(() => undefined);
+      await browser.tabs.update(tabId, { active: true }).catch(() => undefined);
+    }
+  }
+  if (windowId == null) {
+    const win = await browser.windows.getLastFocused().catch(() => null);
+    if (win?.id != null) {
+      windowId = win.id;
+      await browser.windows.update(windowId, { focused: true }).catch(() => undefined);
+    }
+  }
+  // Firefox may reject openPopup from this event/context. Focusing Firefox + the persistent badge is the fallback.
+  try { await browser.browserAction?.openPopup?.(); } catch {}
 }
 
 // ---- consent persistence & authority lifecycle -----------------------------------------------
@@ -143,6 +271,7 @@ function endAuthority(reason, state = "revoked") {
   lastEnd = { state, reason, at: Date.now() };
   applyControl({ type: "revoke", reason });
   clearCachesForAuthorityChange();
+  clearAttention();
   void persistConsent();
 }
 
@@ -244,6 +373,7 @@ async function loadStoredConsent() {
 
 function authorityTick() {
   ensureAuthorityCurrent();
+  attentionCurrent();
   if (consent && consent.mode === "fixed" && Date.now() - consentPersistedSeenAt >= CONSENT_LAST_SEEN_PERSIST_MS) {
     // Only ever move lastSeenAt forward so a regressed clock cannot launder itself.
     consent = { ...consent, lastSeenAt: Math.max(consent.lastSeenAt, Date.now()) };
@@ -305,13 +435,17 @@ function authorizationStatus(options = {}) {
   if (detail === "popup") {
     return {
       ...summary,
+      attention: attentionCurrent() ? { reason: attention.reason, created_at: attention.createdAt, expires_at: attention.expiresAt } : null,
+      notifications_preferred: notificationsPreferred,
+      notifications_permission: notificationsPermissionGranted,
+      notifications_enabled: notificationsPreferred && notificationsPermissionGranted,
       audience_id: consent?.enrolledConsumerId ?? null,
       handoff_note: control.state === "user_control" && control.reason === "agent_requested" ? handoffNote : "",
       rebind: consent && !binding ? { origins: consent.scopeSummary.origins, count: consent.scopeSummary.count } : null,
       pending_origin_changes: { ...pendingOriginChanges },
       seen_audiences: [...seenAudiences.entries()].map(([id, entry]) => ({ audience_id: id, ...entry })),
       scope_tabs: granted ? Object.entries(binding.scope.tabs).map(([tabId, entry]) => ({ tab_id: Number(tabId), origin: entry.origin, via_group: entry.viaGroup ?? null })) : [],
-      scope_groups: granted ? Object.entries(binding.scope.groups).map(([handle, group]) => ({ handle, policy: group.policy })) : [],
+      scope_groups: granted ? Object.entries(binding.scope.groups).map(([handle, group]) => ({ handle, policy: group.policy, native_group_id: group.nativeGroupId })) : [],
     };
   }
   return summary;
@@ -363,6 +497,7 @@ function removeTabFromScope(tabId, reason) {
     binding.scope.tabs = rest;
     delete pendingOriginChanges[key];
     bumpRevision();
+    if (attention?.reason === "origin_confirmation_required" && Object.keys(pendingOriginChanges).length === 0) clearAttention();
   }
   ownedTabIds.delete(tabId);
   interactionGenerations.delete(tabId);
@@ -400,7 +535,9 @@ async function bootstrapIdentity() {
     profileId ||= crypto.randomUUID();
     browserInstanceId ||= crypto.randomUUID();
   }
+  await loadAttentionPreferences();
   await loadStoredConsent();
+  await syncAttentionUi(false);
   if (!authorityTimer) authorityTimer = setInterval(authorityTick, AUTHORITY_TICK_MS);
   connectNative();
 }
@@ -549,8 +686,29 @@ async function handleRequest(message) {
 
   if (op === "status") {
     // Diagnostics (`probe`) must not show up as a local agent the user could share tabs with.
-    if (message.params?.probe !== true) recordAudience(audienceId, message.params?.client_label);
+    if (message.params?.probe !== true) {
+      recordAudience(audienceId, message.params?.client_label);
+      ensureAuthorityCurrent();
+      if (consent && !binding) setAttention("rebind_required", { audienceId });
+    }
     respond(id, { replayed: false, ok: true, result: { ...statusResult(audienceId), browser_info: await browserInfo() } });
+    return;
+  }
+
+  if (op === "request_attention") {
+    const params = message.params && typeof message.params === "object" ? message.params : {};
+    if (params.kind !== "access" || Object.keys(params).some((key) => key !== "kind")) {
+      denied(id, newError("INVALID_ARGUMENT", "request_attention only accepts kind=access", "unsafe_attention_request"));
+      return;
+    }
+    recordAudience(audienceId, "");
+    ensureAuthorityCurrent();
+    if (binding?.audienceId === audienceId) {
+      respond(id, { replayed: false, ok: true, result: { kind: "access", state: "not_needed", expires_at: null } });
+      return;
+    }
+    const state = setAttention("access_requested", { audienceId });
+    respond(id, { replayed: false, ok: true, result: { kind: "access", state, expires_at: attentionCurrent()?.expiresAt ?? null } });
     return;
   }
 
@@ -666,6 +824,7 @@ function featureSummary() {
     tab_groups_api: typeof groupsApiAvailable === "function" ? groupsApiAvailable() : false,
     capture_tab_api: typeof browser.tabs.captureTab === "function",
     screenshots: typeof browser.tabs.captureTab === "function",
+    attention: true,
     control: true,
     tabs: true,
   };
@@ -1618,19 +1777,26 @@ function controlAgentTakeover(params) {
   const result = applyControl({ type: "takeover", reason: "agent_requested" });
   if (!result.ok) throw denial("BROWSER_AUTHORIZATION_REQUIRED", result.reason);
   handoffNote = String(params?.note || "").replace(/\s+/g, " ").trim().slice(0, 200);
+  setAttention("user_action_required", { audienceId: currentAudience(), tabId: attentionTabIdFromControl() });
   return { state: control.state, claim_generation: control.claimGeneration };
 }
 
 function controlRequestResume() {
   const result = applyControl({ type: "request_resume" });
   if (!result.ok) throw denial("BROWSER_AUTHORIZATION_REQUIRED", result.reason);
+  setAttention("resume_requested", { audienceId: currentAudience(), tabId: attentionTabIdFromControl() });
   return { state: control.state, resume_requested: control.resumeRequested };
 }
 
 function userTakeover(reason) {
   const before = control.state;
   const result = applyControl({ type: "takeover", reason });
-  if (result.ok && before === "agent_claimed") handoffNote = "";
+  if (result.ok && before === "agent_claimed") {
+    handoffNote = "";
+    if (reason === "credential_field") {
+      setAttention("credential_field", { audienceId: currentAudience(), tabId: attentionTabIdFromControl() });
+    }
+  }
   return result;
 }
 
@@ -1893,6 +2059,7 @@ async function grantFromPopup(message) {
   if (typeof agentMovedTabs !== "undefined") agentMovedTabs.clear();
   clearCachesForAuthorityChange();
   applyControl({ type: "grant" });
+  clearAttention();
   await persistConsent();
   return { ok: true, ...status() };
 }
@@ -1909,6 +2076,7 @@ async function confirmOrigin(tabId) {
   binding.scope.tabs = { ...binding.scope.tabs, [key]: { ...binding.scope.tabs[key], origin: eligible.origin } };
   delete pendingOriginChanges[key];
   bumpRevision();
+  if (attention?.reason === "origin_confirmation_required" && Object.keys(pendingOriginChanges).length === 0) clearAttention();
   return { ok: true };
 }
 
@@ -1938,6 +2106,92 @@ async function addTabsFromPopup(message) {
   return { ok: true, ...status() };
 }
 
+/** Shrink an active grant in place. This path never adds tabs/groups/actions or enables background control. */
+async function manageAccessFromPopup(message) {
+  const status = () => authorizationStatus({ detail: "popup" });
+  ensureAuthorityCurrent();
+  if (!binding || !consent) return { ok: false, error: "not_granted", ...status() };
+
+  const currentTabIds = Object.keys(binding.scope.tabs).map(Number);
+  const currentGroupHandles = Object.keys(binding.scope.groups);
+  const currentActions = [...binding.actions];
+  const requestedTabIds = Array.isArray(message.tab_ids)
+    ? [...new Set(message.tab_ids.filter((value) => Number.isInteger(value) && value >= 0))]
+    : currentTabIds;
+  const requestedGroups = Array.isArray(message.group_handles)
+    ? [...new Set(message.group_handles.filter((value) => typeof value === "string" && value))]
+    : currentGroupHandles;
+  const requestedActions = Array.isArray(message.actions)
+    ? [...new Set(message.actions.filter((value) => typeof value === "string"))]
+    : currentActions;
+  const requestedControlMode = message.control_mode === undefined ? binding.controlMode : message.control_mode;
+
+  if (requestedTabIds.some((tabId) => !currentTabIds.includes(tabId))
+    || requestedGroups.some((handle) => !currentGroupHandles.includes(handle))
+    || requestedActions.some((action) => !currentActions.includes(action) || !Policy.ACTIONS.includes(action))
+    || !requestedActions.includes("inspect")
+    || !["interactive", "background"].includes(requestedControlMode)
+    || (binding.controlMode === "interactive" && requestedControlMode === "background")) {
+    return { ok: false, error: "manage_access_cannot_expand", ...status() };
+  }
+
+  const keepTabs = new Set(requestedTabIds.map(String));
+  const keepGroups = new Set(requestedGroups);
+  const nextGroups = {};
+  for (const [handle, group] of Object.entries(binding.scope.groups)) {
+    if (!keepGroups.has(handle)) continue;
+    nextGroups[handle] = { ...group, excludedTabIds: [...new Set(group.excludedTabIds || [])] };
+  }
+  const nextTabs = {};
+  for (const [tabId, entry] of Object.entries(binding.scope.tabs)) {
+    if (entry.viaGroup && !keepGroups.has(entry.viaGroup)) continue;
+    if (!keepTabs.has(tabId)) {
+      if (entry.viaGroup && nextGroups[entry.viaGroup]) {
+        nextGroups[entry.viaGroup].excludedTabIds = [...new Set([...(nextGroups[entry.viaGroup].excludedTabIds || []), Number(tabId)])];
+      }
+      continue;
+    }
+    nextTabs[tabId] = entry;
+  }
+  for (const tabId of currentTabIds) {
+    if (nextTabs[String(tabId)]) continue;
+    ownedTabIds.delete(tabId);
+    interactionGenerations.delete(tabId);
+    dropTabCaches(tabId);
+  }
+
+  if (Object.keys(nextTabs).length === 0) {
+    endAuthority("authorized_tabs_removed");
+    return { ok: true, changed: true, ...status() };
+  }
+
+  const changed = JSON.stringify({ tabs: Object.keys(nextTabs), groups: Object.keys(nextGroups), actions: requestedActions, controlMode: requestedControlMode })
+    !== JSON.stringify({ tabs: Object.keys(binding.scope.tabs), groups: Object.keys(binding.scope.groups), actions: currentActions, controlMode: binding.controlMode });
+  if (!changed) return { ok: true, changed: false, ...status() };
+
+  binding.scope = { ...binding.scope, kind: Object.keys(nextGroups).length > 0 ? "group" : "tabs", tabs: nextTabs, groups: nextGroups };
+  binding.actions = [...requestedActions];
+  binding.controlMode = requestedControlMode;
+  binding.instanceId = crypto.randomUUID();
+  const origins = Object.values(nextTabs).map((entry) => entry.origin).filter(Boolean);
+  consent = {
+    ...consent,
+    actions: [...requestedActions],
+    controlMode: requestedControlMode,
+    scopeSummary: {
+      kind: binding.scope.kind,
+      count: Object.keys(nextTabs).length,
+      origins: [...new Set(origins)].slice(0, 32),
+    },
+  };
+  clearCachesForAuthorityChange();
+  applyControl({ type: "scope_reduced", reason: "scope_reduced_by_user" });
+  bumpRevision();
+  clearAttention();
+  await persistConsent();
+  return { ok: true, changed: true, ...status() };
+}
+
 browser.runtime.onMessage.addListener((message, sender) => {
   if (!message || typeof message !== "object") return undefined;
 
@@ -1956,6 +2210,21 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
   if (!popupOnly(sender)) return undefined;
 
+  if (message.type === "zamery_browser_firefox_set_notifications") {
+    return (async () => {
+      const granted = await refreshNotificationPermission();
+      notificationsPreferred = message.enabled === true && granted;
+      await persistAttentionPreferences();
+      await syncAttentionUi(message.enabled === true && granted);
+      return {
+        ok: message.enabled !== true || granted,
+        enabled: notificationsPreferred && granted,
+        permission: granted,
+        error: message.enabled === true && !granted ? "notification_permission_not_granted" : undefined,
+      };
+    })();
+  }
+
   if (message.type === "zamery_browser_firefox_grant" || message.type === "zamery_v0c_grant") {
     return grantFromPopup(message);
   }
@@ -1972,6 +2241,11 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
   if (message.type === "zamery_browser_firefox_resume") {
     const result = applyControl({ type: "resume" });
+    if (result.ok) {
+      clearAttention();
+      const firstPending = Object.keys(pendingOriginChanges)[0];
+      if (firstPending) setAttention("origin_confirmation_required", { audienceId: currentAudience(), tabId: Number(firstPending) });
+    }
     return Promise.resolve({ ok: result.ok, error: result.ok ? undefined : result.reason, ...authorizationStatus({ detail: "popup" }) });
   }
 
@@ -1981,6 +2255,10 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
   if (message.type === "zamery_browser_firefox_add_tabs") {
     return addTabsFromPopup(message);
+  }
+
+  if (message.type === "zamery_browser_firefox_manage_access") {
+    return manageAccessFromPopup(message);
   }
 
   if (message.type === "zamery_browser_firefox_exclude_tab") {
@@ -2016,6 +2294,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (origin !== entry.origin) {
       pendingOriginChanges[String(tabId)] = { from: entry.origin, to: origin };
       if (claimedHere) userTakeover("origin_changed");
+      setAttention("origin_confirmation_required", { audienceId: currentAudience(), tabId });
     } else if (claimedHere && Date.now() - lastAgentMutationAt > AGENT_NAVIGATION_ATTRIBUTION_MS) {
       userTakeover("manual_navigation");
     }
@@ -2036,4 +2315,22 @@ browser.windows.onFocusChanged.addListener((windowId) => {
   void browser.tabs.get(tabIdFromContext(control.claimedContextId)).then((tab) => {
     if (tab.windowId !== windowId) userTakeover("window_switched");
   }).catch(() => undefined);
+});
+
+browser.notifications?.onClicked?.addListener((notificationId) => {
+  if (notificationId === ATTENTION_NOTIFICATION_ID) void focusAttentionUi();
+});
+
+browser.permissions?.onAdded?.addListener((permissions) => {
+  if (permissions?.permissions?.includes?.("notifications")) {
+    notificationsPermissionGranted = true;
+    void syncAttentionUi(false);
+  }
+});
+
+browser.permissions?.onRemoved?.addListener((permissions) => {
+  if (permissions?.permissions?.includes?.("notifications")) {
+    notificationsPermissionGranted = false;
+    void syncAttentionUi(false);
+  }
 });

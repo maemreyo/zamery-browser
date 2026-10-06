@@ -429,7 +429,7 @@ async function reconcileGroupsAfterEvent(reason, tabId) {
     const members = await browser.tabs.query({ groupId: scoped.nativeGroupId });
     let added = false;
     for (const tab of members) {
-      if (binding.scope.tabs[String(tab.id)] || agentMovedTabs.has(tab.id)) continue;
+      if (binding.scope.tabs[String(tab.id)] || agentMovedTabs.has(tab.id) || scoped.excludedTabIds?.includes?.(tab.id)) continue;
       const eligible = await eligibleTabForGrant(tab.id);
       if (!eligible) continue;
       binding.scope.tabs = {

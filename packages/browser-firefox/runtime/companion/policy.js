@@ -203,6 +203,19 @@
       case "release":
         if (control.state !== "agent_claimed") return { ok: true, control };
         return { ok: true, control: next(control, { state: "shared_idle", claimedContextId: null, claimedAudienceId: null, leaseId: null, reason: event.reason || "released" }, now) };
+      case "scope_reduced":
+        if (control.state === "no_access" || control.state === "rebinding") return refuse("not_granted");
+        return {
+          ok: true,
+          control: next(control, {
+            state: control.state === "user_control" ? "user_control" : "shared_idle",
+            claimedContextId: null,
+            claimedAudienceId: null,
+            leaseId: null,
+            reason: control.state === "user_control" ? control.reason : event.reason || "scope_reduced_by_user",
+            resumeRequested: false,
+          }, now),
+        };
       case "takeover":
         if (control.state === "no_access" || control.state === "rebinding") return refuse("not_granted");
         return { ok: true, control: next(control, { state: "user_control", claimedContextId: null, claimedAudienceId: null, leaseId: null, reason: event.reason || "user_takeover", resumeRequested: false }, now) };
