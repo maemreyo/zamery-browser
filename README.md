@@ -10,7 +10,7 @@ Zamery Browser lets an agent work with a browser through a provider-neutral cont
 npm install @zamery/browser-provider @zamery/pi-browser @zamery/browser-firefox
 ```
 
-Node.js `>=22.19.0 <25` is currently supported. `@zamery/pi-browser` is tested against `@earendil-works/pi-coding-agent@0.85.1`.
+Node.js `>=22.19.0 <25` is currently supported. `@zamery/pi-browser` is tested against `@earendil-works/pi-coding-agent@0.87.1`.
 
 ## Packages
 
@@ -87,6 +87,8 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Security policy](SECURITY.md)
 - [Privacy policy](PRIVACY.md)
 - [Contributing](CONTRIBUTING.md)
+- [Community support](SUPPORT.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Examples](examples/README.md)
 
 ## Project status

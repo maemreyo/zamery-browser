@@ -17,6 +17,7 @@ body:
         - "@zamery/browser-provider"
         - "@zamery/pi-browser"
         - "@zamery/browser-firefox"
+        - "@zamery/browser-mcp"
         - Multiple packages
         - Unsure
     validations:

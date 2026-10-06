@@ -28,6 +28,7 @@ body:
         - BrowserProvider contract
         - Pi browser tools
         - Firefox provider
+        - MCP server / Codex integration
         - Browser asset flow
         - Documentation/examples
         - Unsure or cross-cutting

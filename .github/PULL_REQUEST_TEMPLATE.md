@@ -11,6 +11,6 @@ Describe what changed and why.
 
 ## Verification
 
-- [ ] `pnpm build`
-- [ ] `pnpm typecheck`
+- [ ] `pnpm verify`
 - [ ] I reviewed the relevant compatibility/security implications.
+- [ ] I updated documentation/examples when the public behavior changed.
