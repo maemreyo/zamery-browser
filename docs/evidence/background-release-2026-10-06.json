@@ -1,0 +1,61 @@
+{
+  "at": "2026-10-06T01:53:04.426Z",
+  "release": {
+    "git_sha": "70835abbd3f1dfc5722062813a3d003066f1658a",
+    "pull_request": 13,
+    "pull_request_url": "https://github.com/maemreyo/zamery-browser/pull/13",
+    "main_synced": true,
+    "required_status_check": "Build, typecheck and test",
+    "required_status_check_strict": true
+  },
+  "verification": {
+    "pnpm_verify": "PASS",
+    "firefox_tests": "197/197 PASS",
+    "mcp_tests": "21/21 PASS",
+    "live_firefox_acceptance": "24/24 PASS",
+    "live_firefox_evidence": "docs/evidence/live-firefox-background-2026-10-06.json",
+    "amo_prepare": "PASS",
+    "amo_lint": "0 errors / 0 warnings",
+    "amo_source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
+    "unsigned_amo_zip_sha256": "f89f41244a0c5c235c04bdff87d8227312d0c7dfafbe90f75e57603e30623b6f"
+  },
+  "npm": {
+    "registry_smoke_install": "PASS",
+    "packages": {
+      "@zamery/browser-provider": {
+        "version": "0.2.2-rc.2",
+        "dist_tag": "preview",
+        "integrity": "sha512-IEuaXLbasVRAaVUNZa5Je1Ap85Y2/pUpl3BNm3Jy0Kq6ag2/L9HxDOVX/M6o2yXT5g42qyVQEnXGP7kjUd7xNg==",
+        "shasum": "2b37f24afdeabe5b014b635ea3dc8a1cce8f9d3b"
+      },
+      "@zamery/browser-firefox": {
+        "version": "0.2.1-rc.2",
+        "dist_tag": "preview",
+        "integrity": "sha512-a3vfowDwfwBm284r6CYbeK2R9vbhmvAFJkf8DDHU7pao3C0kLbpskkR6BrJJIaOLR9R7jtAQBHYhnkt0Da8hcg==",
+        "shasum": "34a6934af987055496b0669ab093682a430c9b89"
+      },
+      "@zamery/browser-mcp": {
+        "version": "0.1.0-rc.3",
+        "dist_tag": "preview",
+        "integrity": "sha512-Y2X1vEcD/2EMdAsWErOD12zGm4ZBMin6m98LOC+K1dkOFBOVFWscOIIwivo7/nBkVIiDUL2KHqnLMc3wsTaM6A==",
+        "shasum": "055132eceaaf9a33b5efe8fba1a3908e11c1a41d"
+      }
+    }
+  },
+  "companion": {
+    "version": "0.2.1",
+    "extension_id": "zamery-browser-firefox@zamery.local",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2,
+    "journal_schema": 2,
+    "source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
+    "signed_xpi": null,
+    "signing_status": "BLOCKED_MISSING_AMO_API_CREDENTIALS"
+  },
+  "remaining_release_gates": [
+    "Load WEB_EXT_API_KEY and WEB_EXT_API_SECRET into the release environment and submit companion 0.2.1 to AMO for signing.",
+    "Record the signed 0.2.1 XPI SHA-256 in release:tuple and replace the pending XPI row in docs/clean-machine-acceptance.md.",
+    "Run the clean-machine acceptance with the published pinned npm RCs and the signed XPI.",
+    "Run the real already-authenticated Firefox-profile acceptance with the signed companion before claiming technical-preview GO."
+  ]
+}
