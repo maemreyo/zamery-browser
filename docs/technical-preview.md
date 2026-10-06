@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Not a technical preview yet (NO-GO to publish).** The implementation of P0 and almost all of P1 exists and is covered by tests at every layer, including a live run against a real Firefox 157. The current companion `0.2.1` is now Mozilla-signed and its source-compatible XPI has been verified. What is *missing* is a clean-machine install of the matching published packages and a run against a real, already-authenticated Firefox profile. Do not publish or announce this candidate until those rows pass for one release-candidate tuple.
+**Not a technical preview yet (NO-GO to publish).** The implementation of P0 and almost all of P1 exists and is covered by tests at every layer, including a live run against a real Firefox 157. The current companion `0.2.1` is Mozilla-signed and its source-compatible XPI has been verified. The signed companion also passed a run against the user's real, already-authenticated Firefox profile with explicit tab scoping and an outside-scope denial. What is *missing* is a clean-machine install of the matching published packages. Do not publish or announce this candidate until that gate passes for the same release-candidate tuple.
 
 ## What exists (by layer)
 
@@ -17,6 +17,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
 | **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
+| **Real authenticated Firefox profile** | Signed companion `0.2.1` on `default-release`; existing login preserved; two-tab Zamery Center scope; direct access to a previously known unshared tab denied. Evidence: `docs/evidence/real-profile-acceptance-2026-10-06.json`. |
 | Packaging | `pnpm pack` of the three packages, installed in an empty project: `zamery-browser-firefox setup/doctor` and `zamery-browser-mcp` start (initialize ≈ 1 s) |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
@@ -29,7 +30,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
 | 1 | Clean macOS install from published pinned packages + signed XPI | ❌ | Signed XPI is available; only a temp-prefix install has been done. Needs the full runbook on a clean macOS machine. |
-| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | 🟡 | Live run used a throw-away profile (no real login). Unshared-tab isolation is ✅ live. Needs the user's own profile with the signed companion. |
+| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.1` on the user's `default-release` profile preserved the existing authenticated teacher session. After the user scoped access to two Zamery Center tabs, a direct snapshot of a previously known unshared tab failed with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope`. Evidence: `docs/evidence/real-profile-acceptance-2026-10-06.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
 | 5 | Duration: session, presets, custom bounds, exact deadline; expiry/revoke in queued request and active transfer; restart + rebind | ✅ | Unit bounds; companion expiry/clock-regression/queued-write/mid-transfer revoke; live fixed 3-day grant survives extension reload and Firefox restart as `rebind_required` with the original deadline. |
@@ -69,7 +70,6 @@ Current release candidate: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/brows
 ## What blocks GO
 
 1. A clean-machine install of the matching published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
-2. A run against the user's real, already-authenticated Firefox profile with that signed companion.
 
 ## Known limitations of the preview scope
 

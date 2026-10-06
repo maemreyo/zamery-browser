@@ -62,8 +62,17 @@
     "amo_reviewed_at": "2026-10-06T02:16:21Z",
     "signing_status": "SIGNED_REVIEWED"
   },
+  "real_profile_acceptance": {
+    "status": "PASS",
+    "evidence": "docs/evidence/real-profile-acceptance-2026-10-06.json",
+    "firefox": "157.0",
+    "companion": "0.2.1",
+    "signed": true,
+    "shared_tabs": 2,
+    "existing_login_preserved": true,
+    "outside_scope_denied": true
+  },
   "remaining_release_gates": [
-    "Run the clean-machine acceptance with the published pinned npm RCs and the signed XPI.",
-    "Run the real already-authenticated Firefox-profile acceptance with the signed companion before claiming technical-preview GO."
+    "Run the clean-machine acceptance with the published pinned npm RCs and the signed XPI."
   ]
 }
