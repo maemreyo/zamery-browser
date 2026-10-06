@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.maemreyo/zamery-browser",
+  "title": "Zamery Browser",
+  "description": "Use your existing Firefox and logged-in tabs, limited to tabs or groups you explicitly share.",
+  "websiteUrl": "https://github.com/maemreyo/zamery-browser",
+  "repository": {
+    "url": "https://github.com/maemreyo/zamery-browser",
+    "source": "github",
+    "subfolder": "packages/browser-mcp"
+  },
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@zamery/browser-mcp",
+      "version": "0.1.2",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

@@ -74,6 +74,8 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 `@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [release status](docs/technical-preview.md).
 
+Official MCP Registry identity: `io.github.maemreyo/zamery-browser`.
+
 The `v0.2.3` release candidate uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Its exact XPI/source tuple is verified; final stable promotion waits only on refreshed clean-distribution and signed real-profile acceptance. See the release status for exact evidence.
 
 ## Why this exists
