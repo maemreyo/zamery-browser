@@ -76,7 +76,7 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 Official MCP Registry: [`io.github.maemreyo/zamery-browser`](https://registry.modelcontextprotocol.io/?q=io.github.maemreyo%2Fzamery-browser). Firefox Companion: [AMO public listing](https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/).
 
-Stable `v0.2.3` uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Signed real-profile cooperative-background acceptance and clean published-artifact acceptance both pass. See the release status for exact evidence.
+Stable `v0.2.3` remains the current published baseline. Release candidate `v0.2.4` keeps provider/MCP/Pi versions unchanged, uses `@zamery/browser-firefox@0.2.3`, and pairs it with Mozilla-signed/public Firefox companion `0.2.6`. The exact signed XPI/source tuple and signed real-profile behavior pass; clean published-artifact acceptance remains before stable promotion. See the release status for exact evidence.
 
 ## Why this exists
 

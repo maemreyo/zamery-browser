@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-06T16:52:23Z",
+  "status": "SIGNED_COMPANION_ACCEPTED_PENDING_DISTRIBUTION",
+  "release_candidate": {
+    "tag": "v0.2.4",
+    "release_tree_commit": "7db39b10e77cff94770315e910ffd1a2d8947a98",
+    "browser_provider": "0.2.3",
+    "browser_firefox": "0.2.3",
+    "browser_mcp": "0.1.2",
+    "pi_browser": "0.2.2",
+    "companion": "0.2.6",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "amo": {
+    "version_id": 6548018,
+    "file_id": 5092157,
+    "channel": "listed",
+    "status": "public",
+    "xpi_url": "https://addons.mozilla.org/firefox/downloads/file/5092157/f82d5bdb37964220aafe-0.2.6.xpi",
+    "xpi_sha256": "7d3d2a57c464f8ccc6f1ea3edc2612071c6250057990f34f876b8d8b15d69ee0",
+    "companion_source_sha256": "b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9",
+    "mozilla_signature_verified": true
+  },
+  "verification": {
+    "release_tuple_with_signed_xpi": "PASS",
+    "installed_firefox": "157.0",
+    "profile": "default-release",
+    "installed_companion": "0.2.6",
+    "installed_companion_signed": true,
+    "native_handshake": "PASS",
+    "browser_mcp_authorization": "PASS; granted fixed 30-day background control over 5 explicitly shared tabs",
+    "signed_profile_snapshot": "PASS on shared Zamery Center teacher Studio tab",
+    "signed_profile_benign_click": "PASS; non-durable sidebar disclosure control completed",
+    "signed_profile_screenshot": "PASS; JPEG artifact sha256 cd93363eb492c940319acbcf23f6ad66e9edc51460fdd04dcba9e80349c633b7",
+    "source_acceptance": "PASS; browser-firefox 232/232, browser-mcp 23/23, live Firefox 31/31, pnpm verify PASS",
+    "overlay_capture_source_evidence": "PASS; raw cue 1941 pixels, product screenshot 0 cue pixels, concurrent-action product screenshot 0 cue pixels"
+  },
+  "remaining_release_gates": [
+    "Publish @zamery/browser-firefox@0.2.3.",
+    "Run stable-distribution-acceptance.yml against the exact v0.2.4 npm/XPI tuple.",
+    "Create the stable GitHub v0.2.4 release and record final durable release evidence after clean distribution passes."
+  ]
+}
