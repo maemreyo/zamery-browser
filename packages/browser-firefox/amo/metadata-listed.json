@@ -11,6 +11,9 @@
   "homepage": {
     "en-US": "https://github.com/maemreyo/zamery-browser"
   },
+  "support_url": {
+    "en-US": "https://github.com/maemreyo/zamery-browser/issues"
+  },
   "version": {
     "license": "Apache-2.0",
     "approval_notes": "The submitted extension files are human-readable source files; there is no minification or bundling step for the WebExtension. The primary data path is Firefox Native Messaging to the locally installed Zamery host. The user must explicitly authorize the current local native-host session before browser control is granted. The manifest declares browsingActivity, websiteContent, and websiteActivity as required data categories. The companion contains no remote advertising, analytics, or telemetry egress. Public privacy policy: https://github.com/maemreyo/zamery-browser/blob/main/PRIVACY.md"
