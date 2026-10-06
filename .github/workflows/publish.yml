@@ -41,7 +41,7 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Validate release tag against package versions
+      - name: Validate stable release versions
         shell: bash
         run: |
           set -euo pipefail
@@ -50,17 +50,22 @@ jobs:
           import fs from "node:fs";
 
           const expected = process.argv[2];
-          const files = [
-            "package.json",
+          const root = JSON.parse(fs.readFileSync("package.json", "utf8"));
+          if (root.version !== expected) {
+            throw new Error(`package.json: release tag expects ${expected}, found ${root.version}`);
+          }
+
+          const publishable = [
             "packages/browser-provider/package.json",
             "packages/pi-browser/package.json",
             "packages/browser-firefox/package.json",
+            "packages/browser-mcp/package.json",
           ];
 
-          for (const file of files) {
+          for (const file of publishable) {
             const pkg = JSON.parse(fs.readFileSync(file, "utf8"));
-            if (pkg.version !== expected) {
-              throw new Error(`${file}: expected version ${expected}, found ${pkg.version}`);
+            if (pkg.version.includes("-")) {
+              throw new Error(`${file}: stable release cannot publish prerelease version ${pkg.version}`);
             }
           }
           NODE
@@ -73,6 +78,7 @@ jobs:
           pnpm --filter @zamery/browser-provider pack --pack-destination "$RUNNER_TEMP/zamery-pack"
           pnpm --filter @zamery/pi-browser pack --pack-destination "$RUNNER_TEMP/zamery-pack"
           pnpm --filter @zamery/browser-firefox pack --pack-destination "$RUNNER_TEMP/zamery-pack"
+          pnpm --filter @zamery/browser-mcp pack --pack-destination "$RUNNER_TEMP/zamery-pack"
           ls -lh "$RUNNER_TEMP/zamery-pack"
 
       - name: Publish tarballs
@@ -82,15 +88,22 @@ jobs:
           shopt -s nullglob
 
           publish_one() {
-            local pattern="$1"
+            local package_name="$1"
+            local package_version="$2"
+            local pattern="$3"
             local files=("$RUNNER_TEMP"/zamery-pack/$pattern)
             if [[ ${#files[@]} -ne 1 ]]; then
               echo "Expected exactly one tarball matching $pattern, found ${#files[@]}" >&2
               exit 1
             fi
+            if npm view "$package_name@$package_version" version >/dev/null 2>&1; then
+              echo "$package_name@$package_version already exists; skipping publish"
+              return 0
+            fi
             npm publish "${files[0]}" --access public
           }
 
-          publish_one 'zamery-browser-provider-*.tgz'
-          publish_one 'zamery-pi-browser-*.tgz'
-          publish_one 'zamery-browser-firefox-*.tgz'
+          publish_one '@zamery/browser-provider' '0.2.2' 'zamery-browser-provider-*.tgz'
+          publish_one '@zamery/pi-browser' '0.2.1' 'zamery-pi-browser-*.tgz'
+          publish_one '@zamery/browser-firefox' '0.2.1' 'zamery-browser-firefox-*.tgz'
+          publish_one '@zamery/browser-mcp' '0.1.0' 'zamery-browser-mcp-*.tgz'
