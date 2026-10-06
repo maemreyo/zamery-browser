@@ -4,9 +4,9 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Stable `v0.2.2` accepted.** Stable npm artifacts are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. npm `latest` resolves to the stable tuple. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
+**Stable `v0.2.2` accepted.** Stable npm artifacts for that accepted release are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. npm `latest` has since advanced to `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`; those package publications do not by themselves promote a new signed-browser stable release. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
 
-`main` contains post-`v0.2.2` branding work. Companion `0.2.3` added the public icon/toolbar branding and was approved for the public AMO listing on 2026-10-06 (AMO version `6546568`). Companion source `0.2.4` completes the visible Companion branding and AMO listing copy. Its exact signed-XPI digest/source tuple has not yet been recorded in this repository's durable release evidence, so the stable claims in this document continue to refer to the exact `v0.2.2` tuple above.
+`main` contains post-`v0.2.2` release work. Companion `0.2.3` added the public icon/toolbar branding and was approved for the public AMO listing on 2026-10-06 (AMO version `6546568`). Companion source `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. Its exact signed-XPI digest/source tuple has not yet been recorded, so the stable claims in this document continue to refer to the exact `v0.2.2` tuple above. Current package/source-candidate evidence is recorded separately in `docs/evidence/v0.2.3-pending-signed-companion-2026-10-06.json`.
 
 ## What exists (by layer)
 
@@ -79,7 +79,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-No remaining stable release gate is open. Pinned stable artifacts, the GitHub release, signed companion, clean distribution/install, live Firefox behavior, exact XPI/source compatibility, AMO lint/signing, unit/contract/integration tests, MCP tests and npm `latest` aliases are all accepted.
+The next stable promotion is still gated on the signed browser artifact. npm `latest` is already on the new package tuple and the source checks pass, but Companion `0.2.5` must still be submitted/approved by Mozilla, its exact signed XPI/source tuple must be recorded, the real-profile cooperative-background acceptance must pass on that signed build, and stable distribution acceptance must be rerun before creating a new stable GitHub release.
 
 ## Known limitations of the current release scope
 
