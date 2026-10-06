@@ -115,7 +115,7 @@ Dispatch loss → Reconcile → safe status / inspect / human review
 Revoke/expiry → NoAccess; restart → explicit Rebinding
 ```
 
-Preview writes target the claimed context in the focused window. No silent background-target continuation or active-tab retargeting. Takeover blocks queued writes, releases lease, invalidates refs and reconciles already-started work. Popup/new-origin selection requires user confirmation. Perfect observation/atomic focus+action cannot be assumed; implement explicit takeover and document residual races honestly.
+Preview writes target the claimed context in the focused window. No silent background-target continuation or active-tab retargeting. An explicit background-control mode is the bounded follow-up; implementation and acceptance are defined in [Background automation — fast implementation plan](BACKGROUND_AUTOMATION_PLAN.md). Takeover blocks queued writes, releases lease, invalidates refs and reconciles already-started work. Popup/new-origin selection requires user confirmation. Perfect observation/atomic focus+action cannot be assumed; implement explicit takeover and document residual races honestly.
 
 ### P0.5 Minimal standalone MCP vertical slice
 
