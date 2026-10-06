@@ -1,6 +1,6 @@
 # Release status
 
-Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts), desktop Firefox ≥ 142, DOM-synthetic input, no private-window control.
+Date: 2026-10-07. Scope: macOS, local stdio MCP (Codex and other local MCP hosts), desktop Firefox ≥ 142, DOM-synthetic input, no private-window control.
 
 ## Verdict
 
@@ -81,7 +81,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-All technical gates for stable `v0.2.4` are closed: published npm tuple, Mozilla-signed/public Companion `0.2.6`, signed real-profile behavior, and clean distribution/install are accepted. Only GitHub release/tag bookkeeping remains before final closeout.
+No stable release gate remains open for `v0.2.4`. The published npm tuple, Mozilla-signed/public Companion `0.2.6`, signed real-profile behavior, clean distribution/install, and GitHub release/tag are accepted.
 
 ## Known limitations of the current release scope
 
