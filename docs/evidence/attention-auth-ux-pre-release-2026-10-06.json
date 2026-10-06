@@ -1,6 +1,6 @@
 {
-  "at": "2026-10-06T04:05:08Z",
-  "status": "NPM_RC_RELEASED_AMO_PENDING_REVIEW",
+  "at": "2026-10-06T04:21:47Z",
+  "status": "RELEASE_CANDIDATE_ACCEPTED_WITH_CLEAN_MACHINE_WAIVER",
   "candidate": {
     "source_commit": "b1c4b253089fcc3bcff28f94f1cbfd01ba4c735b",
     "browser_provider": "0.2.2-rc.3",
@@ -21,6 +21,8 @@
     "amo_prepare": "PASS",
     "amo_lint": "0 errors / 0 warnings",
     "npm_registry_smoke": "PASS; fresh temp install from registry and import of all three exact RC versions",
+    "signed_xpi_release_tuple": "PASS; companion 0.2.2, exact source SHA-256 match, Mozilla signature present",
+    "signed_real_profile_acceptance": "PASS; authenticated default-release profile, no relaunch/cookie export",
     "clean_machine_gate": "WAIVED_BY_OPERATOR_2026-10-06"
   },
   "release_attempt": {
@@ -46,16 +48,34 @@
         "shasum": "6616bebb04c7b075979bf3733e3a066f0b8a6138"
       }
     },
-    "amo_submission": "SUBMITTED_PENDING_REVIEW",
+    "amo_submission": "SIGNED_REVIEWED_PUBLIC",
     "amo_version_id": 6546104,
     "amo_version_url": "https://addons.mozilla.org/en-US/developers/addon/f82d5bdb37964220aafe/versions/6546104",
-    "signed_xpi": null,
-    "signed_real_profile_acceptance": "PENDING"
+    "amo_reviewed_at": "2026-10-06T03:56:02Z",
+    "signed_xpi": {
+      "file": "f82d5bdb37964220aafe-0.2.2.xpi",
+      "amo_file_id": 5090243,
+      "sha256": "56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9",
+      "manifest_version": "0.2.2",
+      "release_tuple_has_mozilla_signature": true
+    },
+    "signed_real_profile_acceptance": {
+      "status": "PASS",
+      "firefox": "157.0",
+      "profile": "default-release",
+      "companion": "0.2.2",
+      "checks": [
+        "Signed 0.2.2 upgrade entered rebind_required before explicit user sharing; no authority was self-granted.",
+        "Pre-grant access attention returned requested, then already_pending on the duplicate request.",
+        "A different local audience was denied with bound_to_other_consumer / audience_mismatch after the user grant bound to the enrolled MCP consumer.",
+        "After explicit Share, access was granted only to the selected scope and requestAttention returned not_needed.",
+        "A real Zamery Center snapshot succeeded with values_exported=false, hidden_controls_excluded=true and top_frame_only=true.",
+        "Manage Access reduced scope from three tabs to two without expansion; grant revision advanced from 2 to 3.",
+        "The removed Facebook tab immediately failed with BROWSER_AUTHORIZATION_REQUIRED / outside_scope while a remaining Zamery Center tab stayed usable."
+      ],
+      "source_level_boundary_evidence": "The exact signed companion source SHA-256 matches the staged source that passed the live Firefox 24/24 suite, including credential refusal, Take over/Resume, origin confirmation, background no-focus-theft, revoke/expiry/rebind and stale-ref boundaries."
+    }
   },
-  "required_next_evidence": [
-    "Wait for Mozilla review of companion 0.2.2 and obtain the fresh signed XPI; do not reuse signed 0.2.1.",
-    "Verify the signed XPI with pnpm release:tuple --xpi <file>.",
-    "Run attention/auth UX acceptance against the fresh signed artifact on the real authenticated Firefox profile.",
-    "Update final release evidence before merge/release closeout."
-  ]
+  "remaining_release_gates": [],
+  "release_exception": "Clean-machine macOS acceptance was explicitly waived by the operator on 2026-10-06. It remains unverified and is not recorded as PASS."
 }

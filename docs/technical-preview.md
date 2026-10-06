@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Attention/auth UX release candidate in progress.** The clean-machine macOS acceptance gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`). This is a release exception, not a PASS: community users should treat clean-machine installation as unverified until it is measured separately. The previous signed companion `0.2.1` and its authenticated-profile acceptance remain historical evidence only because this branch changes companion runtime source. This candidate can advance without the clean-machine gate, but it still requires a fresh signed `0.2.2` XPI, matching package tuple, and real Firefox acceptance before release evidence is complete.
+**Attention/auth UX release candidate accepted with an explicit clean-machine waiver.** The exact npm RC tuple is published under `preview`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree; signed real-profile attention/auth UX acceptance passed on Firefox 157. The clean-machine macOS gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`). This is a release exception, not a PASS: community users should treat clean-machine installation as unverified until it is measured separately.
 
 ## What exists (by layer)
 
@@ -17,13 +17,13 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
 | **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
-| **Real authenticated Firefox profile** | Signed companion `0.2.1` on `default-release`; existing login preserved; two-tab Zamery Center scope; direct access to a previously known unshared tab denied. Evidence: `docs/evidence/real-profile-acceptance-2026-10-06.json`. |
+| **Real authenticated Firefox profile** | Signed companion `0.2.2` on `default-release`; rebind stayed user-controlled; attention requested/deduped before access; explicit Share bound the grant; Manage Access reduced a three-tab scope to two and the removed Facebook tab immediately became `outside_scope` while Zamery Center stayed usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
 | Packaging | `pnpm pack` of the three packages, installed in an empty project: `zamery-browser-firefox setup/doctor` and `zamery-browser-mcp` start (initialize ≈ 1 s) |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
 
-The attention/auth UX source candidate also passed the current live Firefox suite 24/24 and AMO lint with 0 errors / 0 warnings. This is source-level evidence only; signed `0.2.2` acceptance remains pending. Pre-release evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
+The attention/auth UX source passed the current live Firefox suite 24/24 and AMO lint with 0 errors / 0 warnings. The exact signed `0.2.2` XPI was then verified with `pnpm release:tuple --xpi` and accepted on the real authenticated Firefox profile. Current release evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
 
 ## Acceptance matrix (section 18 of the validation review)
 
@@ -32,7 +32,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
 | 1 | Clean macOS install from published pinned packages + signed XPI | WAIVED | `WAIVED_BY_OPERATOR_2026-10-06`. This gate was intentionally skipped for this operator-authorized preview release. No clean-machine PASS is claimed. |
-| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.1` on the user's `default-release` profile preserved the existing authenticated teacher session. After the user scoped access to two Zamery Center tabs, a direct snapshot of a previously known unshared tab failed with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope`. Evidence: `docs/evidence/real-profile-acceptance-2026-10-06.json`. |
+| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.2` on the user's `default-release` profile preserved the authenticated session. After explicit user Share and then shrink-only Manage Access, the removed Facebook tab failed immediately with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope` while the two Zamery Center tabs remained usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
 | 5 | Duration: session, presets, custom bounds, exact deadline; expiry/revoke in queued request and active transfer; restart + rebind | ✅ | Unit bounds; companion expiry/clock-regression/queued-write/mid-transfer revoke; live fixed 3-day grant survives extension reload and Firefox restart as `rebind_required` with the original deadline. |
@@ -45,7 +45,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
 | 13 | Cached replay after revoke denied | ✅ | Companion VM (same-id snapshot replay after revoke is the reproduced F02 probe, now prevented). |
 | 14 | Multi-client / profile isolation | 🟡 | Real host tests: audience isolation, per-profile journals, single-writer lock. Two simultaneous real Firefox profiles were not run. |
-| 15 | Signed XPI/source compatibility | ❌ | Companion source is now `0.2.2`; the signed `0.2.1` XPI (AMO version `6545949`, SHA-256 `06b0b5480eb20eee209902bfd040ab6df3754ceaca1cefcb84ef573ccf8c6fce`) is historical evidence only. A fresh `0.2.2` signing result must be verified with `pnpm release:tuple --xpi <file>`. |
+| 15 | Signed XPI/source compatibility | ✅ | Signed companion `0.2.2`, AMO version `6546104`, file `5090243`, SHA-256 `56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9`. `pnpm release:tuple --xpi` verified manifest `0.2.2`, Mozilla signature presence, and exact companion source SHA-256 `3ed571fe4f4af7400b7ceb1bd27d8e67278d59b23b3f15ba497b425671457bbf`. |
 | 16 | Mismatched protocol fails closed | ✅ | Host + companion VM + doctor tests; a protocol-1 companion with a protocol-2 host is rejected for every op but `status`. |
 
 ## Codex runs (real Codex CLI 0.160.0, MCP server over stdio)
@@ -69,14 +69,11 @@ The previously accepted tuple used npm `@zamery/browser-provider@0.2.2-rc.1`, `@
 
 Previous accepted background-control tuple: `@zamery/browser-provider@0.2.2-rc.2`, `@zamery/browser-firefox@0.2.1-rc.2`, `@zamery/browser-mcp@0.1.0-rc.3`, companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. Those npm RCs were published under dist-tag `preview`, fresh-registry smoke passed, and the signed XPI/source tuple was verified. Durable historical evidence: `docs/evidence/background-release-2026-10-06.json`.
 
-Attention/auth UX candidate: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. The exact npm RC tuple is published under dist-tag `preview` and fresh-registry smoke passes. AMO companion `0.2.2` is submitted and pending Mozilla review; signed-artifact verification and real-profile attention/auth acceptance remain outstanding. Durable current evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
+Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. The exact npm RC tuple is published under dist-tag `preview`, fresh-registry smoke passes, the Mozilla-signed XPI/source tuple is verified, and real authenticated-profile attention/auth UX acceptance passes. Durable evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
 
 ## What blocks GO
 
-1. Obtain and verify a fresh Mozilla-signed companion `0.2.2` XPI; the signed `0.2.1` artifact cannot be reused. AMO submission is currently pending Mozilla review.
-2. Run the attention/auth UX scenarios against the fresh signed XPI on the real Firefox profile and record durable evidence.
-
-The clean-machine macOS gate is not in this blocking list because the operator explicitly waived it on 2026-10-06. That exception does not convert the gate into a PASS.
+No remaining release gate is open for this operator-authorized preview candidate. The clean-machine macOS gate was explicitly waived on 2026-10-06; that exception does not convert the gate into a PASS.
 
 ## Known limitations of the preview scope
 
