@@ -1,0 +1,77 @@
+{
+  "at": "2026-10-06T05:20:00Z",
+  "status": "STABLE_RELEASE_ACCEPTED",
+  "release": {
+    "tag": "v0.2.2",
+    "package_source_commit": "edd596886e7cb795bfa7c7ef5cbe42593123dbe0",
+    "browser_provider": "0.2.2",
+    "browser_firefox": "0.2.1",
+    "browser_mcp": "0.1.0",
+    "pi_browser": "0.2.1",
+    "companion": "0.2.2",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "npm": {
+    "@zamery/browser-provider": {
+      "version": "0.2.2",
+      "pre_release_dist_tag": "preview",
+      "shasum": "f9a63878a3b0b99009368f53db54c68494cc0675",
+      "integrity": "sha512-6L3xFR/hwzoZYKF5vXXHo0QFU9sC/PUtGEGWBrRbfcRZjKpMXe1+kSdolfeFJ4TL6H7S9LnA4pBdBCQFVCZNqg=="
+    },
+    "@zamery/browser-firefox": {
+      "version": "0.2.1",
+      "pre_release_dist_tag": "preview",
+      "shasum": "1b2e625bb0ae57a0d9508a28512d9d558e745535",
+      "integrity": "sha512-eW2MQ2TK6dhRhZksC3tGx3W0ggSbfgg2BLOqxmQTX1TpaoNPNKZ/VGoWE0l7MWMCA0tmhzbZkmSjkA/rA0LveA=="
+    },
+    "@zamery/browser-mcp": {
+      "version": "0.1.0",
+      "pre_release_dist_tag": "preview",
+      "shasum": "13af8502ebbf4d3bc98e43b7a996390212235c32",
+      "integrity": "sha512-QAGgphxVjkAIymDGdVRC52GMAyvYxFm1f4XBM4ozeb9nktTzMZZ/1atggQiAj0xXJcjrC3R4+ktgN60jE6fp5A=="
+    },
+    "@zamery/pi-browser": {
+      "version": "0.2.1",
+      "pre_release_dist_tag": "preview",
+      "shasum": "cd22c77de277258f7c2fd52d66264b7ebb707b69",
+      "integrity": "sha512-TawDakA524EUEkeF/ZPr7BIbWYm+p0ueCjcvlIbF0efyecnWPw0tOwJDFFAMMoAfDGVly6mtmSw1TJT/sBfjNg=="
+    }
+  },
+  "signed_xpi": {
+    "version": "0.2.2",
+    "amo_version_id": 6546104,
+    "amo_file_id": 5090243,
+    "sha256": "56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9",
+    "companion_source_sha256": "3ed571fe4f4af7400b7ceb1bd27d8e67278d59b23b3f15ba497b425671457bbf",
+    "mozilla_signature_verified": true
+  },
+  "verification": {
+    "pnpm_verify": "PASS",
+    "browser_firefox_tests": "209/209 PASS",
+    "browser_mcp_tests": "23/23 PASS",
+    "live_firefox_source_acceptance": "24/24 PASS",
+    "signed_real_profile_acceptance": "PASS; Firefox 157 default-release; see attention-auth-ux-pre-release-2026-10-06.json",
+    "clean_distribution_acceptance": {
+      "status": "PASS",
+      "github_actions_run_id": 37417918059,
+      "runner_image": "macos-26-arm64",
+      "macos": "26.6.2 build 25G83",
+      "arch": "arm64",
+      "node": "24.19.0",
+      "firefox_installed": "155.0.1",
+      "repository_checkout": false,
+      "checks": [
+        "Installed all four exact stable npm packages from the public registry.",
+        "Dependency tree deduped Firefox, MCP and Pi Browser onto browser-provider 0.2.2.",
+        "Imported all four packages successfully.",
+        "Verified the shipped Codex AGENTS snippet exists in browser-mcp.",
+        "Downloaded the signed companion from the GitHub prerelease and verified its expected SHA-256 and Mozilla signature entry.",
+        "Native-host setup dry-run and real setup succeeded.",
+        "Doctor returned ok=true with node, host-manifest, host-launcher and host-copy all ok."
+      ],
+      "boundary": "The clean runner did not install the XPI into an authenticated Firefox profile or perform the A-L interactive scenarios; signed real-profile browser behavior is evidenced separately."
+    }
+  },
+  "remaining_release_gates": []
+}

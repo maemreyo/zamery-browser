@@ -55,11 +55,11 @@ try {
 
 For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_contexts`, `browser_snapshot`, `browser_assets`, and `browser_act`. `browser_assets` returns opaque refs and safe metadata rather than source URLs or browser credentials.
 
-## Codex and other MCP hosts (technical preview)
+## Codex and other MCP hosts
 
-`@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [technical preview status](docs/technical-preview.md).
+`@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [release status](docs/technical-preview.md).
 
-The accepted technical preview candidate is now published as a GitHub prerelease. Its exact npm tuple is `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, and `@zamery/browser-mcp@0.1.0-rc.4`, all published under the npm `preview` dist-tag. The Mozilla-signed Firefox companion is `0.2.2`. Signed real-profile acceptance passed on Firefox 157; clean-machine macOS installation remains explicitly waived rather than passed. See the technical preview status for the evidence and limitation.
+Stable release `v0.2.2` uses `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`, plus Mozilla-signed Firefox companion `0.2.2`. Published-artifact installation passed on a clean GitHub-hosted macOS runner, and the signed companion separately passed real authenticated-profile acceptance on Firefox 157. See the release status for exact evidence and remaining scope limits.
 
 ## Why this exists
 
@@ -74,7 +74,7 @@ Browser automation often hides important distinctions: whether the browser is us
 
 ## Firefox companion
 
-The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. The accepted technical preview companion is Mozilla-signed `0.2.2` using protocol 2. Protocol-1 `0.1.x` components remain incompatible and fail closed when mixed with protocol-2 components. See [Firefox setup](docs/firefox-setup.md).
+The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. Stable companion `0.2.2` uses protocol 2. Protocol-1 `0.1.x` components remain incompatible and fail closed when mixed with protocol-2 components. See [Firefox setup](docs/firefox-setup.md).
 
 ## Documentation
 
@@ -82,7 +82,7 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Architecture](docs/architecture.md)
 - [Firefox setup](docs/firefox-setup.md)
 - [Security model](docs/security-model.md)
-- [Technical preview status](docs/technical-preview.md)
+- [Release status](docs/technical-preview.md)
 - [Codex + Firefox community roadmap](docs/CODEX_FIREFOX_COMMUNITY_ROADMAP.md)
 - [Security policy](SECURITY.md)
 - [Privacy policy](PRIVACY.md)
