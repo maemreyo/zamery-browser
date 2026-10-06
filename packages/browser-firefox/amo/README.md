@@ -8,7 +8,7 @@ Current public AMO version: `0.2.5` (companion protocol 2) with stable Gecko ID 
 
 `0.2.3` made the branded Companion public. `0.2.4` was a transient branding source candidate and was not promoted. `0.2.5` incorporates the cooperative background-control fix and is the accepted Companion for Zamery Browser `v0.2.3`.
 
-The separate `codex/firefox-agent-action-overlay` development lane also used `0.2.5` while it was only an unsigned candidate. Because `0.2.5` is now an immutable public AMO release from `main`, that overlay lane must rebase on current `main` and use a new Companion version before any future submission.
+The agent-action-overlay lane has now rebased on that immutable `0.2.5` release and uses Companion `0.2.6`. The `0.2.6` candidate adds advisory exact-target action cues plus capture suppression while keeping native wire protocol 2 and BrowserProvider V2 unchanged. It is not a signed/public artifact until the AMO submission produces an exact signed-XPI/source tuple.
 
 ## Production source boundary
 
@@ -18,6 +18,7 @@ The file set is derived from `manifest.json` by `scripts/firefox-amo-listed.sh` 
 
 - `asset-discovery-v1.js`
 - `asset-transfer-v1.js`
+- `agent-presence.js`
 - `background.js`
 - `content.js`
 - `control-ops.js`
@@ -68,4 +69,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Companion `0.2.5` is approved/public on AMO and is the accepted browser artifact for Zamery Browser `v0.2.3`. Exact XPI/source provenance, signed real-profile behavior and clean published-artifact acceptance are recorded in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
+Companion `0.2.5` is approved/public on AMO and remains the accepted browser artifact for Zamery Browser `v0.2.3`. Companion `0.2.6` passes the source gate (`pnpm verify`, live Firefox 31/31, AMO lint 0 errors / 0 warnings / 0 notices) with staged production-source SHA-256 `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`. Before promoting `0.2.6`, obtain the Mozilla-signed XPI, verify it with `pnpm release:tuple --xpi`, and record the exact XPI/source tuple plus signed real-profile and distribution acceptance.
