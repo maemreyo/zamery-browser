@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-06T11:50:19Z",
+  "status": "SIGNED_COMPANION_ACCEPTED_PENDING_FINAL_RELEASE",
+  "release_candidate": {
+    "tag": "v0.2.3",
+    "package_source_commit": "4ca16f9ee6dfdab9a1c57b7abfdef9cde9ae87d9",
+    "merge_commit": "5527797b76c33775393e45c88494c30a9cede505",
+    "browser_provider": "0.2.3",
+    "browser_firefox": "0.2.2",
+    "browser_mcp": "0.1.1",
+    "pi_browser": "0.2.2",
+    "companion": "0.2.5",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "amo": {
+    "version_id": 6547131,
+    "file_id": 5091270,
+    "channel": "listed",
+    "status": "public",
+    "reviewed_at": "2026-10-06T11:36:45Z",
+    "xpi_url": "https://addons.mozilla.org/firefox/downloads/file/5091270/f82d5bdb37964220aafe-0.2.5.xpi",
+    "xpi_sha256": "8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c",
+    "companion_source_sha256": "a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012",
+    "mozilla_signature_verified": true
+  },
+  "verification": {
+    "amo_lint": "0 errors / 0 warnings",
+    "release_tuple_with_signed_xpi": "PASS",
+    "installed_firefox": "157.0",
+    "installed_companion": "0.2.5",
+    "installed_companion_signed": true,
+    "doctor": "PASS; live handshake companion 0.2.5; access rebind_required after extension update"
+  },
+  "remaining_release_gates": [
+    "Share again after the signed 0.2.5 update and rerun real-profile cooperative-background acceptance.",
+    "Run stable-distribution-acceptance.yml against the exact v0.2.3 npm/XPI tuple.",
+    "Create GitHub stable release v0.2.3 and record final durable release evidence."
+  ]
+}

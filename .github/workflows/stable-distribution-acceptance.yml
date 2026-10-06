@@ -38,10 +38,10 @@ jobs:
           cd "$RUNNER_TEMP/zamery-stable"
           npm init -y
           npm install --save-exact \
-            @zamery/browser-provider@0.2.2 \
-            @zamery/browser-firefox@0.2.1 \
-            @zamery/browser-mcp@0.1.0 \
-            @zamery/pi-browser@0.2.1
+            @zamery/browser-provider@0.2.3 \
+            @zamery/browser-firefox@0.2.2 \
+            @zamery/browser-mcp@0.1.1 \
+            @zamery/pi-browser@0.2.2
           npm ls @zamery/browser-provider @zamery/browser-firefox @zamery/browser-mcp @zamery/pi-browser
           test -f node_modules/@zamery/browser-mcp/codex/AGENTS.snippet.md
           node --input-type=module <<'NODE'
@@ -57,12 +57,12 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/zamery-stable"
           curl -fsSL \
-            https://github.com/maemreyo/zamery-browser/releases/download/v0.2.2-preview.1/zamery-browser-companion-0.2.2.xpi \
-            -o zamery-browser-companion-0.2.2.xpi
-          observed="$(shasum -a 256 zamery-browser-companion-0.2.2.xpi | awk '{print $1}')"
-          expected="56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9"
+            https://addons.mozilla.org/firefox/downloads/file/5091270/f82d5bdb37964220aafe-0.2.5.xpi \
+            -o zamery-browser-companion-0.2.5.xpi
+          observed="$(shasum -a 256 zamery-browser-companion-0.2.5.xpi | awk '{print $1}')"
+          expected="8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c"
           test "$observed" = "$expected"
-          unzip -l zamery-browser-companion-0.2.2.xpi | grep -E 'META-INF/mozilla\.rsa|manifest\.json'
+          unzip -l zamery-browser-companion-0.2.5.xpi | grep -E 'META-INF/mozilla\.rsa|manifest\.json'
 
       - name: Verify native-host setup and doctor
         shell: bash

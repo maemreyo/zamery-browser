@@ -74,7 +74,7 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 `@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [release status](docs/technical-preview.md).
 
-The last fully accepted signed-browser release is `v0.2.2`, with Mozilla-signed Firefox companion `0.2.2`. npm `latest` has advanced to `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`. Companion source `0.2.5` contains the cooperative background-control fix and current branding, but it is not the recorded stable browser artifact until Mozilla signs it and the exact XPI/source tuple passes release acceptance. See the release status for exact evidence and remaining gates.
+The `v0.2.3` release candidate uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Its exact XPI/source tuple is verified; final stable promotion waits only on refreshed clean-distribution and signed real-profile acceptance. See the release status for exact evidence.
 
 ## Why this exists
 
@@ -89,7 +89,7 @@ Browser automation often hides important distinctions: whether the browser is us
 
 ## Firefox companion
 
-The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. Stable companion `0.2.2` and current source candidate `0.2.5` use protocol 2. Protocol-1 `0.1.x` components remain incompatible and fail closed when mixed with protocol-2 components. See [Firefox setup](docs/firefox-setup.md).
+The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Messaging host. Current signed companion `0.2.5` uses protocol 2. Protocol-1 `0.1.x` components remain incompatible and fail closed when mixed with protocol-2 components. See [Firefox setup](docs/firefox-setup.md).
 
 ## Documentation
 
