@@ -54,6 +54,7 @@ code { font-size: 11px; overflow-wrap: anywhere; }
     <div class="title" id="shared-summary"></div>
     <div class="sub" id="shared-expiry"></div>
     <div class="sub" id="shared-actions"></div>
+    <div class="sub" id="shared-control-mode"></div>
     <div class="actions"><button id="share-current" type="button">Also share this tab</button><button id="revoke" type="button" class="danger">Stop sharing</button></div>
   </div>
   <div id="pending" class="hidden">
@@ -84,6 +85,9 @@ code { font-size: 11px; overflow-wrap: anywhere; }
   <label><input type="checkbox" id="act-capture" checked> <span>Take screenshots</span></label>
   <label><input type="checkbox" id="act-reorganize"> <span>Reorganize these tabs and groups</span></label>
   <label><input type="checkbox" id="act-create"> <span>Open and close tabs it creates itself</span></label>
+
+  <h2>Control</h2>
+  <label><input type="checkbox" id="control-background"> <span><strong>Allow background control</strong><br><span class="sub">The agent may click or type in these exact shared tabs while you use another tab or window. It will not bring them to the front.</span></span></label>
 
   <h2>For how long</h2>
   <div class="row">

@@ -10,7 +10,7 @@ const NODE = { node_id: "n1", role: "button", name: "Go", tag: "button" };
 let sequence = 0;
 const rid = (prefix = "req") => `${prefix}-${++sequence}`;
 
-async function boot({ tabs, windows, storage, grant = true, duration, actions, audience = AUD, sessionId } = {}) {
+async function boot({ tabs, windows, storage, grant = true, duration, actions, controlMode, audience = AUD, sessionId } = {}) {
   const company = await loadCompanion({
     tabs: tabs ?? [
       { id: 1, url: "https://a.test/page", title: "A", active: true },
@@ -28,7 +28,7 @@ async function boot({ tabs, windows, storage, grant = true, duration, actions, a
   await company.request({ id: rid("status"), op: "status", audience_id: audience, params: { client_label: "Test agent" } });
   let granted;
   if (grant) {
-    granted = await company.popup({ type: "zamery_browser_firefox_grant", tab_ids: [1], duration: duration ?? { mode: "session" }, actions, audience_id: audience });
+    granted = await company.popup({ type: "zamery_browser_firefox_grant", tab_ids: [1], duration: duration ?? { mode: "session" }, actions, control_mode: controlMode, audience_id: audience });
     assert.equal(granted.ok, true, JSON.stringify(granted));
   }
   const ask = (op, params = {}, extra = {}) => company.request({ id: extra.id ?? rid(op), op, audience_id: extra.audience ?? audience, params });
@@ -478,6 +478,78 @@ describe("human <-> agent control", () => {
     const response = await ask("act", { context_id: "tab:1", ref, action: "click" });
     assert.equal(response.error.reason, "claimed_tab_not_focused");
     assert.equal(pages[1].acts.length, 0);
+  });
+
+  it("background control mutates only the claimed shared tab while another tab/window stays foreground", async () => {
+    const { company, pages, ask } = await boot({
+      controlMode: "background",
+      tabs: [
+        { id: 1, url: "https://a.test/", active: true, windowId: 1 },
+        { id: 3, url: "https://b.test/", active: false, windowId: 1 },
+        { id: 4, url: "https://c.test/", active: true, windowId: 2 },
+      ],
+      windows: {
+        1: { id: 1, focused: true, incognito: false, type: "normal" },
+        2: { id: 2, focused: false, incognito: false, type: "normal" },
+      },
+    });
+    const ref = await claimedRef(ask);
+    await company.browser.tabs.update(3, { active: true });
+    await company.browser.windows.update(2, { focused: true });
+    await settle();
+
+    const status = await company.popup({ type: "zamery_browser_firefox_auth_status" });
+    assert.equal(status.control_mode, "background");
+    assert.equal(status.control.state, "agent_claimed", "unrelated tab/window changes must not kill a background claim");
+    const response = await ask("act", { context_id: "tab:1", ref, action: "click" });
+    assert.equal(response.ok, true, JSON.stringify(response));
+    assert.equal(company.windows.get(2).focused, true, "agent must not steal window focus");
+    assert.equal(company.tabs.get(4).active, true, "foreground tab in the user's window stays active");
+    assert.equal(pages[1].acts.length, 1);
+    assert.equal(pages[3].acts.length, 0);
+    assert.equal(pages[4].acts.length, 0);
+  });
+
+  it("background control still hands over when the user touches the claimed tab", async () => {
+    const { company, ask } = await boot({ controlMode: "background" });
+    const ref = await claimedRef(ask);
+    await company.nonPopup({ type: "zamery_browser_firefox_interaction" }, { id: "zamery-browser-firefox@zamery.local", tab: { id: 1 } });
+    const blocked = await ask("act", { context_id: "tab:1", ref, action: "click" });
+    assert.equal(blocked.error.reason, "user_control");
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.reason, "human_interaction");
+  });
+
+  it("background control keeps credential refusal and origin confirmation fail-closed", async () => {
+    const { company, pages, ask } = await boot({ controlMode: "background" });
+    company.state.contentHandlers.set(1, async (message, tab) => {
+      if (message.type === "zamery_browser_firefox_act") return { error: { code: "USER_TAKEOVER_REQUIRED", reason: "credential_field" } };
+      return pages[1].handler(message, tab);
+    });
+    let ref = await claimedRef(ask);
+    const refused = await ask("act", { context_id: "tab:1", ref, action: "fill", value: "secret" });
+    assert.equal(refused.result.outcome, "not_started");
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.reason, "credential_field");
+
+    await company.popup({ type: "zamery_browser_firefox_resume" });
+    ref = await claimedRef(ask);
+    company.tabs.get(1).url = "https://other.test/";
+    await company.events.tabsOnUpdated.fire(1, { url: "https://other.test/" }, company.tabs.get(1));
+    const changed = await ask("act", { context_id: "tab:1", ref, action: "click" });
+    assert.equal(changed.error.reason, "origin_changed_confirmation_required");
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_auth_status" })).control.reason, "origin_changed");
+  });
+
+  it("background control obeys Take over, Resume and revoke without reviving stale refs", async () => {
+    const { company, ask } = await boot({ controlMode: "background" });
+    const ref = await claimedRef(ask);
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_takeover" })).control.state, "user_control");
+    assert.equal((await ask("act", { context_id: "tab:1", ref, action: "click" })).error.reason, "user_control");
+    assert.equal((await company.popup({ type: "zamery_browser_firefox_resume" })).control.state, "shared_idle");
+    assert.equal((await ask("act", { context_id: "tab:1", ref, action: "click" })).error.reason, "claim_required");
+    const fresh = await claimedRef(ask);
+    assert.equal((await ask("act", { context_id: "tab:1", ref: fresh, action: "click" })).ok, true);
+    await company.popup({ type: "zamery_browser_firefox_revoke" });
+    assert.equal((await ask("act", { context_id: "tab:1", ref: fresh, action: "click" })).error.code, "BROWSER_AUTHORIZATION_REQUIRED");
   });
 
   it("a tab switch in the claimed window is a takeover", async () => {

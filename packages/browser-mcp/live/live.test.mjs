@@ -130,6 +130,134 @@ describe("live Firefox: single-tab grant, privacy and acting", () => {
   });
 });
 
+describe("live Firefox: background control", () => {
+  it("acts only on the shared background tab without stealing focus; takeover, resume and revoke remain authoritative", async () => {
+    await reset();
+    const shared = await openTab("/form", { active: true });
+    const foreground = await openTab("/article");
+    await live.user("activate_tab", { tab_id: shared.id });
+    await share([shared.id], { control_mode: "background" });
+
+    const snap = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    assert.equal(snap.structuredContent.claim.claimed, true);
+    assert.equal((await call("browser_status")).structuredContent.authorization.control_mode, "background");
+    const find = (name) => snap.structuredContent.nodes.find((node) => node.name === name).ref;
+
+    await live.user("activate_tab", { tab_id: foreground.id });
+    await sleep(500);
+    let status = await call("browser_status");
+    assert.equal(status.structuredContent.authorization.control.state, "agent_claimed", text(status));
+    let realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((tab) => tab.id === foreground.id).active, true);
+    assert.equal(realTabs.find((tab) => tab.id === shared.id).active, false);
+
+    const deniedForeground = await call("browser_snapshot", { context_id: `tab:${foreground.id}` });
+    assert.equal(deniedForeground.isError, true);
+    assert.equal(deniedForeground.structuredContent.error.reason, "outside_scope");
+
+    const fill = await call("browser_fill", {
+      context_id: `tab:${shared.id}`,
+      observation_id: snap.structuredContent.observation_id,
+      ref: find("Full name"),
+      value: "Background Agent",
+    });
+    assert.equal(fill.isError, undefined, text(fill));
+    const click = await call("browser_click", {
+      context_id: `tab:${shared.id}`,
+      observation_id: snap.structuredContent.observation_id,
+      ref: find("Save"),
+    });
+    assert.equal(click.isError, undefined, text(click));
+    assert.equal(await pageValue(shared.id, "document.getElementById('out').textContent"), "saved:Background Agent");
+
+    realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((tab) => tab.id === foreground.id).active, true, "foreground tab stayed active after background mutations");
+    assert.equal(realTabs.find((tab) => tab.id === shared.id).active, false, "agent never focused the shared background tab");
+
+    const fresh = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    const field = fresh.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    await live.user("takeover");
+    const blocked = await call("browser_fill", {
+      context_id: `tab:${shared.id}`,
+      observation_id: fresh.structuredContent.observation_id,
+      ref: field,
+      value: "must-not-write",
+    });
+    assert.equal(blocked.isError, true);
+    assert.equal(blocked.structuredContent.outcome, "not_started");
+    assert.equal(await pageValue(shared.id, "document.getElementById('name').value"), "Background Agent");
+
+    const requested = await call("browser_handoff", { action: "resume" });
+    assert.equal(requested.structuredContent.control.resume_requested, true);
+    await live.user("resume");
+    const resumed = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    assert.equal(resumed.structuredContent.claim.claimed, true);
+    const resumedField = resumed.structuredContent.nodes.find((node) => node.name === "Full name").ref;
+    const resumedFill = await call("browser_fill", {
+      context_id: `tab:${shared.id}`,
+      observation_id: resumed.structuredContent.observation_id,
+      ref: resumedField,
+      value: "Background Resumed",
+    });
+    assert.equal(resumedFill.isError, undefined, text(resumedFill));
+    realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((tab) => tab.id === foreground.id).active, true, "resume did not steal focus");
+
+    await live.user("revoke");
+    status = await call("browser_status");
+    assert.equal(status.structuredContent.authorization.state, "revoked");
+    const revoked = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    assert.equal(revoked.isError, true);
+    note("background-control", {
+      controlMode: "background",
+      exactSharedContextOnly: true,
+      foregroundStayedActive: true,
+      takeoverBlockedWrite: true,
+      resumedWithoutFocusSteal: true,
+      revokeImmediate: true,
+    });
+  });
+
+  it("keeps credential and cross-origin boundaries fail-closed while the claimed tab is backgrounded", async () => {
+    await reset();
+    const login = await openTab("/login", { active: true });
+    const foreground = await openTab("/article");
+    await live.user("activate_tab", { tab_id: login.id });
+    await share([login.id], { control_mode: "background" });
+    const loginSnap = await call("browser_snapshot", { context_id: `tab:${login.id}` });
+    const password = loginSnap.structuredContent.nodes.find((node) => node.name === "Password").ref;
+    await live.user("activate_tab", { tab_id: foreground.id });
+
+    const refused = await call("browser_fill", {
+      context_id: `tab:${login.id}`,
+      observation_id: loginSnap.structuredContent.observation_id,
+      ref: password,
+      value: "agent-must-not-type-this",
+    });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.outcome, "not_started");
+    assert.equal(await pageValue(login.id, "document.getElementById('pw').value"), "PREFILLED-PASSWORD-CANARY");
+    let realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((tab) => tab.id === foreground.id).active, true);
+
+    await reset();
+    const shared = await openTab("/form", { active: true });
+    const other = await openTab("/article");
+    await live.user("activate_tab", { tab_id: shared.id });
+    await share([shared.id], { control_mode: "background" });
+    await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    await live.user("activate_tab", { tab_id: other.id });
+    await live.user("navigate_tab", { tab_id: shared.id, url: `${live.altOrigin}/login` });
+    await sleep(700);
+    const denied = await call("browser_snapshot", { context_id: `tab:${shared.id}` });
+    assert.equal(denied.isError, true);
+    assert.equal(denied.structuredContent.error.reason, "origin_changed_confirmation_required");
+    realTabs = (await live.user("tabs")).tabs;
+    assert.equal(realTabs.find((tab) => tab.id === other.id).active, true, "origin boundary handling did not steal focus");
+    note("background-hard-boundaries", { credentialRefused: true, originConfirmationRequired: true, foregroundStayedActive: true });
+  });
+});
+
 describe("live Firefox: human <-> agent control", () => {
   let tab;
   before(async () => { await reset(); });
@@ -490,7 +618,7 @@ describe("live Firefox: trusted human gestures (Marionette-synthesized input)", 
     await reset();
     const tab = await openTab("/form", { active: true });
     await live.user("activate_tab", { tab_id: tab.id });
-    await share([tab.id]);
+    await share([tab.id], { control_mode: "background" });
     const snap = await call("browser_snapshot", { context_id: `tab:${tab.id}` });
     assert.equal(snap.structuredContent.claim.claimed, true);
     const field = snap.structuredContent.nodes.find((node) => node.name === "Full name").ref;
@@ -524,7 +652,7 @@ describe("live Firefox: trusted human gestures (Marionette-synthesized input)", 
 describe("live Firefox: nothing sensitive reached disk", () => {
   it("typed values, refused secrets and page canaries are absent from the journal, host log and artifact metadata", async () => {
     const roots = [live.dirs.state, live.dirs.install, path.join(live.dirs.root, "artifacts")];
-    const secrets = ["Agent Name", "agent-user", "agent-must-not-type-this", "typed by a human", "PREFILLED-NAME-CANARY", "PREFILLED-PASSWORD-CANARY", "HIDDEN-CSRF-CANARY"];
+    const secrets = ["Agent Name", "agent-user", "Background Agent", "Background Resumed", "must-not-write", "agent-must-not-type-this", "typed by a human", "PREFILLED-NAME-CANARY", "PREFILLED-PASSWORD-CANARY", "HIDDEN-CSRF-CANARY"];
     const scanned = [];
     const walk = (dir) => {
       if (!fs.existsSync(dir)) return;

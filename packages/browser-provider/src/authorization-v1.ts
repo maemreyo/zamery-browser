@@ -26,6 +26,8 @@ export type BrowserAuthorizationActionV1 =
   | "create_tab"
   | "close_owned_tab";
 
+export type BrowserControlModeV1 = "interactive" | "background";
+
 export interface BrowserAuthorizationDetailV1 {
   protocolVersion: typeof BROWSER_AUTHORIZATION_PROVIDER_V1;
   state: BrowserAuthorizationStateV1;
@@ -38,6 +40,8 @@ export interface BrowserAuthorizationDetailV1 {
   bindingToken: string | null;
   /** `session` ends with the live host session; `fixed` keeps its deadline across restarts but needs explicit rebind. */
   mode: "session" | "fixed" | null;
+  /** `interactive` requires the shared tab to stay foreground; `background` is an explicit user opt-in for exact shared contexts. */
+  controlMode?: BrowserControlModeV1 | null;
   durationDays: number | null;
   issuedAt: number | null;
   expiresAt: number | null;

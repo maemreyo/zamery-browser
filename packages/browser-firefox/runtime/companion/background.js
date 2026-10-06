@@ -291,6 +291,7 @@ function authorizationStatus(options = {}) {
     expires_at: consent ? consent.expiresAt : null,
     duration_mode: consent ? consent.mode : null,
     duration_days: consent ? consent.durationDays : null,
+    control_mode: consent ? Policy.normalizeControlMode(consent.controlMode) : null,
     scope_kind: granted ? binding.scope.kind : consent ? consent.scopeSummary.kind : null,
     scope_count: granted ? Object.keys(binding.scope.tabs).length : 0,
     actions: granted ? [...binding.actions] : [],
@@ -1647,8 +1648,9 @@ function queueMutation(contextId, fn) {
   return execution;
 }
 
-/** The claimed tab must be the active tab of Firefox's last-focused normal window at the moment of the write. */
+/** Interactive control requires foreground focus; background control stays bound to the exact authorized context. */
 async function requireFocusedTarget(tab) {
+  if (binding?.controlMode === "background") return;
   const focused = await browser.windows.getLastFocused({ windowTypes: ["normal"] }).catch(() => null);
   if (!focused || focused.id !== tab.windowId || tab.active !== true) {
     throw denial("BROWSER_CONTEXT_UNAVAILABLE", "claimed_tab_not_focused", "the claimed tab is not the active tab of the focused Firefox window");
@@ -1869,6 +1871,7 @@ async function grantFromPopup(message) {
     actions: message.actions ?? (rebinding ? consent.actions : undefined),
     scopeSummary: { kind: scopeKind, count: Object.keys(scopeTabs).length, origins },
     groupPolicy,
+    controlMode: rebinding ? consent.controlMode : message.control_mode,
     previous: rebinding ? consent : null,
   });
   consent = { ...nextConsent, enrolledConsumerId: audienceId };
@@ -1881,6 +1884,7 @@ async function grantFromPopup(message) {
     audienceId,
     actions: [...consent.actions],
     groupPolicy: consent.groupPolicy,
+    controlMode: Policy.normalizeControlMode(consent.controlMode),
     scope: { kind: scopeKind, tabs: scopeTabs, groups: scopeGroups },
     monotonicDeadline: consent.mode === "fixed" ? performance.now() + (consent.expiresAt - now) : null,
   };
@@ -2019,7 +2023,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
 });
 
 browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
-  if (control.state !== "agent_claimed" || Date.now() < agentActivationUntil) return;
+  if (control.state !== "agent_claimed" || binding?.controlMode === "background" || Date.now() < agentActivationUntil) return;
   const claimed = tabIdFromContext(control.claimedContextId);
   if (claimed === tabId) return;
   void browser.tabs.get(claimed).then((tab) => {
@@ -2028,7 +2032,7 @@ browser.tabs.onActivated.addListener(({ tabId, windowId }) => {
 });
 
 browser.windows.onFocusChanged.addListener((windowId) => {
-  if (control.state !== "agent_claimed" || windowId === browser.windows.WINDOW_ID_NONE || Date.now() < agentActivationUntil) return;
+  if (control.state !== "agent_claimed" || binding?.controlMode === "background" || windowId === browser.windows.WINDOW_ID_NONE || Date.now() < agentActivationUntil) return;
   void browser.tabs.get(tabIdFromContext(control.claimedContextId)).then((tab) => {
     if (tab.windowId !== windowId) userTakeover("window_switched");
   }).catch(() => undefined);

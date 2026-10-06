@@ -15,6 +15,7 @@
   const ACTIONS = Object.freeze(["inspect", "interact", "capture", "reorganize", "create_tab", "close_owned_tab"]);
   const DEFAULT_ACTIONS = Object.freeze(["inspect", "interact", "capture"]);
   const GROUP_POLICIES = Object.freeze(["membership_snapshot", "follow_group"]);
+  const CONTROL_MODES = Object.freeze(["interactive", "background"]);
 
   function isPlainObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -53,13 +54,17 @@
     return GROUP_POLICIES.includes(value) ? value : "membership_snapshot";
   }
 
+  function normalizeControlMode(value) {
+    return CONTROL_MODES.includes(value) ? value : "interactive";
+  }
+
   // ---- consent --------------------------------------------------------------------------------
 
   /**
    * ConsentGrant: what the user agreed to and for how long. It deliberately holds no live tab or group
    * identity: those are LiveBinding facts that must be re-established after any restart.
    */
-  function buildConsent({ now, grantId, trustedProfileId, audienceId, duration, actions, scopeSummary, groupPolicy, previous }) {
+  function buildConsent({ now, grantId, trustedProfileId, audienceId, duration, actions, scopeSummary, groupPolicy, controlMode, previous }) {
     const rebinding = Boolean(previous);
     return {
       schemaVersion: CONSENT_SCHEMA_VERSION,
@@ -78,6 +83,7 @@
         origins: Array.isArray(scopeSummary?.origins) ? [...new Set(scopeSummary.origins.filter((o) => typeof o === "string"))].slice(0, 32) : [],
       },
       groupPolicy: normalizeGroupPolicy(groupPolicy),
+      controlMode: rebinding ? normalizeControlMode(previous.controlMode) : normalizeControlMode(controlMode),
       navigationPolicy: "current_origin",
       restartPolicy: "explicit_rebind",
       lastSeenAt: now,
@@ -108,6 +114,7 @@
       ...value,
       actions: normalizeActions(value.actions),
       groupPolicy: normalizeGroupPolicy(value.groupPolicy),
+      controlMode: normalizeControlMode(value.controlMode),
       navigationPolicy: "current_origin",
       restartPolicy: "explicit_rebind",
     };
@@ -235,11 +242,13 @@
     ACTIONS,
     DEFAULT_ACTIONS,
     GROUP_POLICIES,
+    CONTROL_MODES,
     CONTROL_STATES,
     normalizeDuration,
     computeExpiry,
     normalizeActions,
     normalizeGroupPolicy,
+    normalizeControlMode,
     buildConsent,
     consentExpired,
     clockRegressed,

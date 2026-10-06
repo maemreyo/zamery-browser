@@ -9,7 +9,7 @@ const JS = fs.readFileSync(new URL("../runtime/companion/popup.js", import.meta.
 
 const base = {
   state: "revoked", reason: null, current_host_session_id: "5d1e3bb0-7c2a-4e4e-a3a5-0d1f6c9a1111", granted_host_session_id: null,
-  browser_run_epoch: "epoch", grant_id: null, grant_revision: 0, granted_at: null, expires_at: null, duration_mode: null, duration_days: null,
+  browser_run_epoch: "epoch", grant_id: null, grant_revision: 0, granted_at: null, expires_at: null, duration_mode: null, duration_days: null, control_mode: null,
   scope_kind: null, scope_count: 0, actions: [], group_policy: null, audience_bound: false, expected_protocol_version: 2,
   current_host_protocol_version: 2, protocol_compatible: true, control: { state: "no_access", reason: null, resume_requested: false },
   audience_id: null, rebind: null, pending_origin_changes: {}, seen_audiences: [], scope_tabs: [], scope_groups: [],
@@ -61,6 +61,7 @@ describe("popup states", () => {
     assert.deepEqual(boxes.map((box) => [box.value, box.checked, box.disabled]), [["1", true, false], ["2", false, true]]);
     assert.match(popup.text(), /Local agent \(MCP\)/);
     assert.ok(!/Codex/i.test(popup.text()), "an unauthenticated process is never called Codex");
+    assert.equal(popup.document.querySelector("#control-background").checked, false);
     assert.ok(!popup.text().includes(base.current_host_session_id.slice(0, 8)) || popup.document.querySelector("details").textContent.includes(base.current_host_session_id.slice(0, 8)), "session id only in diagnostics");
     assert.equal(popup.document.querySelector("#grant").disabled, false);
   });
@@ -79,6 +80,8 @@ describe("popup states", () => {
     popup.document.querySelector("#groups input").dispatchEvent(new popup.window.Event("change"));
     popup.document.querySelector('input[value="follow_group"]').checked = true;
     popup.document.querySelector("#act-reorganize").checked = true;
+    popup.document.querySelector("#control-background").checked = true;
+    popup.document.querySelector("#control-background").dispatchEvent(new popup.window.Event("change"));
     popup.document.querySelector("#duration").value = "7";
     popup.document.querySelector("#duration").dispatchEvent(new popup.window.Event("change"));
     assert.match(popup.document.querySelector("#expiry-preview").textContent, /Access ends/);
@@ -87,7 +90,7 @@ describe("popup states", () => {
     const grant = popup.sent.find((message) => message.type === "zamery_browser_firefox_grant");
     assert.deepEqual({ ...grant, actions: [...grant.actions], tab_ids: [...grant.tab_ids], group_ids: [...grant.group_ids], duration: { ...grant.duration } }, {
       type: "zamery_browser_firefox_grant", audience_id: "aud-1", tab_ids: [1], group_ids: [4], group_policy: "follow_group",
-      actions: ["inspect", "interact", "capture", "reorganize"], duration: { mode: "fixed", days: 7 },
+      control_mode: "background", actions: ["inspect", "interact", "capture", "reorganize"], duration: { mode: "fixed", days: 7 },
     });
   });
 
@@ -113,11 +116,12 @@ describe("popup states", () => {
 
   it("granted + agent controlling: shows scope, exact expiry, takeover; no resume button", async () => {
     const expires = Date.now() + 3 * 86_400_000;
-    const popup = await open({ ...base, state: "granted", scope_count: 2, scope_kind: "tabs", actions: ["inspect", "interact"], duration_mode: "fixed", duration_days: 3, expires_at: expires, control: { state: "agent_claimed", reason: null, resume_requested: false } });
+    const popup = await open({ ...base, state: "granted", scope_count: 2, scope_kind: "tabs", actions: ["inspect", "interact"], duration_mode: "fixed", duration_days: 3, expires_at: expires, control_mode: "background", control: { state: "agent_claimed", reason: null, resume_requested: false } });
     assert.match(popup.text(), /Agent is controlling a shared tab/);
     assert.match(popup.text(), /2 tabs shared/);
     assert.match(popup.text(), /days left/);
     assert.match(popup.text(), /read, click & type/);
+    assert.match(popup.text(), /Background control: on/);
     assert.ok(popup.document.querySelector("#resume").classList.contains("hidden"));
     popup.document.querySelector("#takeover").click();
     await new Promise((resolve) => setTimeout(resolve, 30));
@@ -137,11 +141,13 @@ describe("popup states", () => {
 
   it("rebind: keeps the original deadline, locks duration, and explains the restart", async () => {
     const expires = Date.now() + 5 * 86_400_000;
-    const popup = await open({ ...base, state: "rebind_required", reason: "restart", duration_mode: "fixed", duration_days: 7, expires_at: expires, audience_id: "aud-1", seen_audiences: [], rebind: { origins: ["https://mail.test"], count: 1 } });
+    const popup = await open({ ...base, state: "rebind_required", reason: "restart", duration_mode: "fixed", duration_days: 7, expires_at: expires, control_mode: "background", audience_id: "aud-1", seen_audiences: [], rebind: { origins: ["https://mail.test"], count: 1 } });
     assert.match(popup.text(), /Firefox or the local bridge restarted/);
     assert.match(popup.text(), /still valid until/);
     assert.match(popup.text(), /mail\.test/);
     assert.equal(popup.document.querySelector("#duration").disabled, true);
+    assert.equal(popup.document.querySelector("#control-background").disabled, true);
+    assert.equal(popup.document.querySelector("#control-background").checked, true);
     assert.match(popup.document.querySelector("#expiry-preview").textContent, /unchanged/);
     assert.equal(popup.document.querySelector("#grant").textContent, "Share again");
   });

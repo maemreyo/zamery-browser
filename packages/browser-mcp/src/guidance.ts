@@ -29,6 +29,9 @@ export function guidanceForAuthorization(detail: BrowserAuthorizationDetailV1): 
       break;
   }
   if (detail.state === "granted") {
+    if (detail.controlMode === "background") {
+      out.push("Background control is enabled for the exact shared contexts. You may keep acting on the claimed shared tab while the user works in another tab or window; never retarget to the foreground tab.");
+    }
     if (detail.control.state === "user_control") {
       out.push(`The user is in control${detail.control.reason ? ` (${detail.control.reason})` : ""}. Do not try to act. Use browser_handoff with action "resume" to ask them to hand control back, then wait.`);
     } else if (detail.control.state === "shared_idle") {

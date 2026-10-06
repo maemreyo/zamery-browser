@@ -21,7 +21,9 @@ Authorization is checked before execution **and** before a result leaves the com
 
 ## Human ↔ agent control
 
-A write needs a *claim* (taken with a snapshot) and an observation taken at the current claim generation, in the active tab of Firefox's last-focused window. The claim ends and the agent is blocked when the user takes over (panel button), uses the page (trusted pointer/key/input events on the claimed tab), switches tabs/windows, navigates manually, when the agent reaches a sign-in/code field, or when an action's outcome is unknown. The agent can only *ask* to resume; only the user resumes. Detection of human activity is best-effort (OS-level dialogs and some gestures are invisible to extensions); the panel's Take over button is authoritative.
+A write needs a *claim* (taken with a snapshot) and an observation taken at the current claim generation. The grant also has an explicit control mode. `interactive` is the default, including for legacy grants: the claimed tab must be the active tab of Firefox's last-focused window, and a user tab/window switch hands control to the user. `background` is a user opt-in for the exact shared context: reads and DOM mutations may continue while another tab/window is foreground, without activating the claimed tab or retargeting to the foreground tab.
+
+Both modes keep the same hard boundaries. The claim ends and the agent is blocked when the user takes over (panel button), uses the claimed page (trusted pointer/key/input events), navigates it manually, reaches a credential/OTP/payment-like field, crosses an origin that requires confirmation, loses authorization/rebind freshness, or when an action's outcome is unknown. The agent can only *ask* to resume; only the user resumes. Detection of human activity is best-effort (OS-level dialogs and some gestures are invisible to extensions); the panel's Take over button is authoritative.
 
 ## Privacy of what the agent sees
 

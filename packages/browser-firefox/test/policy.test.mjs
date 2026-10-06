@@ -40,6 +40,15 @@ describe("actions", () => {
   });
 });
 
+describe("control mode", () => {
+  it("defaults unknown and legacy values to interactive and accepts explicit background", () => {
+    assert.equal(policy.normalizeControlMode(undefined), "interactive");
+    assert.equal(policy.normalizeControlMode("legacy"), "interactive");
+    assert.equal(policy.normalizeControlMode("interactive"), "interactive");
+    assert.equal(policy.normalizeControlMode("background"), "background");
+  });
+});
+
 describe("consent lifecycle", () => {
   const base = { now: NOW, grantId: "g1", trustedProfileId: "p1", audienceId: "audience-1", duration: { mode: "fixed", days: 7 }, actions: undefined, scopeSummary: { kind: "tabs", count: 1, origins: ["https://a.test", "https://a.test"] } };
 
@@ -48,6 +57,7 @@ describe("consent lifecycle", () => {
     assert.equal(consent.expiresAt, NOW + 7 * policy.DAY_MS);
     assert.equal(consent.restartPolicy, "explicit_rebind");
     assert.equal(consent.groupPolicy, "membership_snapshot");
+    assert.equal(consent.controlMode, "interactive");
     assert.deepEqual(consent.scopeSummary.origins, ["https://a.test"]);
     const serialized = JSON.stringify(consent);
     assert.ok(!/tabId|tab_ids|groupId|"title"/.test(serialized), "consent must not carry numeric tab/group identity or titles");
@@ -61,6 +71,7 @@ describe("consent lifecycle", () => {
     assert.equal(rebound.expiresAt, first.expiresAt);
     assert.equal(rebound.grantRevision, 2);
     assert.equal(rebound.lastSeenAt, later);
+    assert.equal(rebound.controlMode, "interactive");
   });
   it("expires exactly at the deadline", () => {
     const consent = policy.buildConsent(base);
@@ -75,7 +86,13 @@ describe("consent lifecycle", () => {
   });
   it("round-trips persisted consent and rejects tampered or session records", () => {
     const consent = policy.buildConsent(base);
-    assert.ok(policy.parseStoredConsent(JSON.parse(JSON.stringify(consent))));
+    assert.equal(policy.parseStoredConsent(JSON.parse(JSON.stringify(consent))).controlMode, "interactive");
+    const legacy = { ...consent };
+    delete legacy.controlMode;
+    assert.equal(policy.parseStoredConsent(legacy).controlMode, "interactive", "old persisted grants default to interactive");
+    const background = policy.buildConsent({ ...base, controlMode: "background" });
+    assert.equal(policy.parseStoredConsent(JSON.parse(JSON.stringify(background))).controlMode, "background");
+    assert.equal(policy.buildConsent({ ...base, now: NOW + policy.DAY_MS, previous: background, controlMode: "interactive" }).controlMode, "background", "rebind preserves the user's original mode");
     assert.equal(policy.parseStoredConsent({ ...consent, expiresAt: consent.expiresAt + 1 }), null, "deadline must equal issuedAt + days");
     assert.equal(policy.parseStoredConsent({ ...consent, durationDays: 90, expiresAt: consent.issuedAt + 90 * policy.DAY_MS }), null);
     assert.equal(policy.parseStoredConsent({ ...consent, schemaVersion: 2 }), null);

@@ -69,6 +69,7 @@ describe("single authorized tab vertical slice (full stack)", () => {
     await stack.grant();
     const status = await stack.call("browser_status");
     assert.equal(status.structuredContent.authorization.state, "granted");
+    assert.equal(status.structuredContent.authorization.control_mode, "interactive");
     assert.equal(status.structuredContent.readiness.interact, true);
 
     const contexts = await stack.call("browser_contexts");

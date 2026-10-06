@@ -1,10 +1,10 @@
 # Technical preview status
 
-Date: 2026-10-05. Scope: macOS, local stdio MCP (Codex and other local MCP hosts), desktop Firefox ≥ 142, DOM-synthetic input, no private-window control.
+Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts), desktop Firefox ≥ 142, DOM-synthetic input, no private-window control.
 
 ## Verdict
 
-**Not a technical preview yet (NO-GO to publish).** The implementation of P0 and almost all of P1 exists and is covered by tests at every layer, including a live run against a real Firefox 157. What is *missing* is evidence that only a signed artifact and other machines can provide: a Mozilla-signed protocol-2 companion, a clean-machine install of the published tarballs, and a run against a real, already-authenticated Firefox profile. Do not publish npm packages or an XPI, and do not tell users to install this, until those rows pass for one release-candidate tuple.
+**Not a technical preview yet (NO-GO to publish).** The implementation of P0 and almost all of P1 exists and is covered by tests at every layer, including a live run against a real Firefox 157. Background control is implemented and has isolated real-Firefox acceptance, but it changes the companion source. The previously signed `0.2.0` XPI therefore does not prove the current `0.2.1` source tuple. What is *missing* is a signed artifact for the current source, a clean-machine install of the matching published packages, and a run against a real, already-authenticated Firefox profile. Do not publish or announce this candidate until those rows pass for one release-candidate tuple.
 
 ## What exists (by layer)
 
@@ -16,7 +16,7 @@ Date: 2026-10-05. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 | Content script in jsdom (snapshot privacy, credential fields, readable text) | `test/content-snapshot.test.mjs`; popup states: `test/popup.test.mjs` |
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
-| **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; evidence `docs/evidence/live-firefox-2026-10-05.json` |
+| **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
 | Packaging | `pnpm pack` of the three packages, installed in an empty project: `zamery-browser-firefox setup/doctor` and `zamery-browser-mcp` start (initialize ≈ 1 s) |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
@@ -34,7 +34,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
 | 5 | Duration: session, presets, custom bounds, exact deadline; expiry/revoke in queued request and active transfer; restart + rebind | ✅ | Unit bounds; companion expiry/clock-regression/queued-write/mid-transfer revoke; live fixed 3-day grant survives extension reload and Firefox restart as `rebind_required` with the original deadline. |
 | 6 | Restart / rebind semantics | ✅ | Live extension reload + Firefox restart. |
-| 7 | Takeover/resume incl. MFA, manual click/navigation, SPA, focus switch, popup, same-node edit | ✅ | Live: credential hand-off, **trusted** (Marionette-synthesized) key and click, manual navigation, SPA staleness, origin change, tab switch, page popup not shared. Same-node edit detection covered in the VM only (the interaction generation). Native OS dialogs/passkeys are out of scope. |
+| 7 | Takeover/resume incl. MFA, manual click/navigation, SPA, focus switch, popup, background control, same-node edit | ✅ | Live: credential hand-off, **trusted** (Marionette-synthesized) key and click, manual navigation, SPA staleness, origin change, interactive tab switch, page popup not shared, plus explicit background mode acting on the exact shared tab while another tab remains foreground with no focus theft/retarget. Take over/Resume/revoke, credential refusal and origin confirmation were re-proven in background mode. Same-node edit detection is covered in the VM only (the interaction generation). Native OS dialogs/passkeys are out of scope. |
 | 8 | Tab lifecycle: create/navigate/reload/close owned, user close refused, no duplicate create on recovery | ✅ | Live (repeat of the same request id opens one tab). |
 | 9 | Screenshot + model vision | ✅ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. The supported Codex configuration includes the shipped recipe, which makes Codex open the returned local image file before describing pixels; live Firefox + Codex 0.160.0 passed 3/3 with that recipe. Without it this bridge guessed incorrectly 0/2. DPR ≠ 1, scrolled-viewport and resize races remain coverage gaps rather than preview blockers. |
 | 10 | MCP / native-host failure recovery | ✅ | MCP child SIGKILL → new child keeps the grant, observations fresh; host killed mid-action → `outcome_unknown`, secret never on disk; extension reload live. Codex-host restart recovery is not measured (it depends on the Codex surface). |
@@ -42,7 +42,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
 | 13 | Cached replay after revoke denied | ✅ | Companion VM (same-id snapshot replay after revoke is the reproduced F02 probe, now prevented). |
 | 14 | Multi-client / profile isolation | 🟡 | Real host tests: audience isolation, per-profile journals, single-writer lock. Two simultaneous real Firefox profiles were not run. |
-| 15 | Signed XPI/source compatibility | ❌ | No signed protocol-2 XPI exists. `pnpm release:tuple --xpi <file>` records its SHA-256 and verifies a Mozilla signature entry when one is supplied. |
+| 15 | Signed XPI/source compatibility | ❌ | A signed companion `0.2.0` exists for the earlier source tuple, but current background-control source is companion `0.2.1`, so the old XPI is not source-compatible evidence. A new signed `0.2.1` candidate is required. `pnpm release:tuple --xpi <file>` records its SHA-256 and verifies a Mozilla signature entry when one is supplied. |
 | 16 | Mismatched protocol fails closed | ✅ | Host + companion VM + doctor tests; a protocol-1 companion with a protocol-2 host is rejected for every op but `status`. |
 
 ## Codex runs (real Codex CLI 0.160.0, MCP server over stdio)
@@ -62,17 +62,19 @@ Consequence: preview acceptance is tied to a tested **Codex surface/build + inst
 
 `pnpm release:tuple` prints the tuple for the working tree: git SHA (+ dirty flag), npm package versions, companion version and a hash of the exact files that would be staged for AMO, signed XPI SHA-256 (with `--xpi`), native wire protocol, BrowserProvider protocol, installed Firefox, Node, macOS build/arch and the Codex CLI. These are different numbers on purpose: package semver, companion version, wire protocol, MCP protocol and provider protocol move independently.
 
-Release candidate (2026-10-06): npm `@zamery/browser-provider@0.2.2-rc.1`, `@zamery/browser-firefox@0.2.1-rc.1`, `@zamery/browser-mcp@0.1.0-rc.2` (publish under dist-tag `preview`, never `latest`; accept by exact version pin). `@zamery/pi-browser` is not part of this gate. Signed companion `0.2.0`: `f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3`, Mozilla signature present, extension id `zamery-browser-firefox@zamery.local`, source hash `f07ffd81cd9bd04788291c672007c188e5fe618843a1995fc8f076cdf063e56f` (the RC bump changes package metadata only; the companion files are byte-identical to those in the signed XPI). Native wire 2, journal schema 2. The release tuple must record the final git SHA together with the XPI SHA. Registry note: `@zamery/browser-mcp` is a new package, so npm assigned `latest` to its first version and does not allow removing the `latest` tag; `latest` is therefore pointed at `0.1.0-rc.2` until a stable `0.1.0` exists, and `0.1.0-rc.1` (published without the Codex recipe) is deprecated. Acceptance always uses exact version pins, never tags.
+The previously accepted tuple used npm `@zamery/browser-provider@0.2.2-rc.1`, `@zamery/browser-firefox@0.2.1-rc.1`, `@zamery/browser-mcp@0.1.0-rc.2` and signed companion `0.2.0` (`f82d5bdb37964220aafe-0.2.0.xpi`, SHA-256 `956e4b8ef0d3b083e35375ec3a0d0c769cf125a3ae1e86fca87e67446e0a65c3`, source hash `f07ffd81cd9bd04788291c672007c188e5fe618843a1995fc8f076cdf063e56f`). Background automation changes provider/MCP contracts and companion runtime, so that tuple is now a historical baseline only.
+
+Current source candidate: companion `0.2.1`, native wire 2, BrowserProvider protocol 2, journal schema 2. `pnpm release:tuple` on the dirty implementation tree reports companion source SHA-256 `0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af` and no signed XPI. Before a new preview candidate is cut, the affected npm packages need new RC versions (`@zamery/browser-provider`, `@zamery/browser-firefox`, and `@zamery/browser-mcp`) and the final tuple must be regenerated from the clean commit with the signed `0.2.1` XPI SHA-256. No npm package or XPI was published by the background-automation implementation slice.
 
 ## What blocks GO
 
-1. ~~A Mozilla-signed protocol-2 companion~~ — done (unlisted, see above).
-2. A clean-machine install of the published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
-3. A run against the user's real, already-authenticated Firefox profile with the signed companion.
+1. A Mozilla-signed companion `0.2.1` matching the current background-control source.
+2. A clean-machine install of the matching published, pinned artifacts (Node/Firefox/Codex versions recorded in the tuple).
+3. A run against the user's real, already-authenticated Firefox profile with that signed companion.
 
 ## Known limitations of the preview scope
 
-- Detection of human activity is best-effort: trusted gestures on the claimed tab, tab/window switches, manual navigation and credential fields are detected; OS-level dialogs and some gestures are not. The panel's *Take over* is authoritative.
+- Detection of human activity is best-effort: trusted gestures on the claimed tab, manual navigation and credential fields are detected in both control modes; tab/window switches hand control to the user in `interactive` mode but are intentionally ignored in explicit `background` mode. OS-level dialogs and some gestures are not detected. The panel's *Take over* is authoritative.
 - Only the top frame is snapshotted; iframes, closed shadow roots, console/network capture, downloads/uploads, native choosers and passkeys are not covered. Containers: the partition is recorded when Firefox exposes `cookieStoreId` (it requires the `cookies` permission, which is deliberately not requested), otherwise it is unknown.
 - `tabs.captureTab` has no abort; the encoded-size limit is enforced after Firefox has produced the data URL.
 - The consumer id is a routing key, not an authenticated identity (same-OS-user trust boundary).

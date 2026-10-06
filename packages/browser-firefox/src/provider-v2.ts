@@ -179,6 +179,7 @@ interface RawAuthorizationStatus {
   binding_token?: unknown;
   duration_mode?: unknown;
   duration_days?: unknown;
+  control_mode?: unknown;
   scope_kind?: unknown;
   scope_count?: unknown;
   actions?: unknown;
@@ -959,6 +960,7 @@ export class FirefoxBrowserProviderV2 implements
           grantId: null,
           bindingToken: null,
           mode: null,
+          controlMode: null,
           durationDays: null,
           issuedAt: null,
           expiresAt: null,
@@ -987,6 +989,7 @@ export class FirefoxBrowserProviderV2 implements
       grantId: nullableString(auth.grant_id),
       bindingToken: nullableString(auth.binding_token),
       mode: auth.duration_mode === "session" || auth.duration_mode === "fixed" ? auth.duration_mode : null,
+      controlMode: auth.control_mode === "background" ? "background" : auth.control_mode === "interactive" ? "interactive" : null,
       durationDays: nullableNumber(auth.duration_days),
       issuedAt: nullableNumber(auth.granted_at),
       expiresAt: nullableNumber(auth.expires_at),

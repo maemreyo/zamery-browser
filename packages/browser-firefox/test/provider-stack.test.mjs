@@ -39,6 +39,7 @@ describe("BrowserProvider V2 over the real broker, host and companion", () => {
     const detail = await provider.authorizationDetail(target);
     assert.equal(detail.state, "granted");
     assert.equal(detail.mode, "fixed");
+    assert.equal(detail.controlMode, "interactive");
     assert.equal(detail.durationDays, 7);
     assert.deepEqual([...detail.actions], ["inspect", "interact", "capture"]);
     assert.equal(detail.scope.count, 1);

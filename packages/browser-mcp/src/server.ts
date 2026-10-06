@@ -154,6 +154,7 @@ function authorizationJson(detail: BrowserAuthorizationDetailV1): Json {
     state: detail.state,
     reason: detail.reason,
     mode: detail.mode,
+    control_mode: detail.controlMode ?? null,
     duration_days: detail.durationDays,
     expires_at: detail.expiresAt ? new Date(detail.expiresAt).toISOString() : null,
     scope: detail.scope,

@@ -117,6 +117,9 @@ function renderGranted(status) {
     : "Until you stop sharing or restart Firefox.";
   const labels = { inspect: "read", interact: "click & type", capture: "screenshots", reorganize: "reorganize", create_tab: "open its own tabs", close_owned_tab: "close its own tabs" };
   $("#shared-actions").textContent = `Allowed: ${status.actions.map((action) => labels[action] || action).join(", ")}`;
+  $("#shared-control-mode").textContent = status.control_mode === "background"
+    ? "Background control: on — shared tabs may be controlled without bringing them to the front."
+    : "Background control: off — writes require the shared tab to be in front.";
 
   const pending = status.pending_origin_changes || {};
   const ids = Object.keys(pending);
@@ -164,10 +167,12 @@ async function renderPicker(status, rebinding) {
 
   if (!pickerDirty) await renderTabChoices();
   $("#duration").disabled = rebinding;
+  $("#control-background").disabled = rebinding;
   if (rebinding) {
     const days = status.duration_days;
     $("#duration").value = status.duration_mode === "fixed" && PRESET_DAYS.has(days) ? String(days) : "custom";
     $("#custom-days").value = String(days ?? 2);
+    $("#control-background").checked = status.control_mode === "background";
   }
   updateDurationUi(status, rebinding);
   const clockRow = $("#clock-row");
@@ -330,6 +335,7 @@ $("#duration").addEventListener("change", () => updateDurationUi(lastStatus, las
 $("#custom-days").addEventListener("input", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
 $("#agent").addEventListener("change", () => { $("#grant").disabled = !$("#agent").value; });
 $("#clock-confirm").addEventListener("change", () => updateDurationUi(lastStatus, lastStatus?.state === "rebind_required"));
+$("#control-background").addEventListener("change", () => { pickerDirty = true; });
 
 $("#grant").addEventListener("click", () => {
   const tabIds = [...$("#tabs").querySelectorAll("input:checked")].map((input) => Number(input.value));
@@ -346,6 +352,7 @@ $("#grant").addEventListener("click", () => {
     tab_ids: tabIds,
     group_ids: groupIds,
     group_policy: document.querySelector("input[name=group-policy]:checked")?.value,
+    control_mode: $("#control-background").checked ? "background" : "interactive",
     actions,
     ...(rebinding ? { confirm_clock_change: $("#clock-confirm").checked } : selectedDuration()),
   });
