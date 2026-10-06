@@ -76,7 +76,7 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 Official MCP Registry identity: `io.github.maemreyo/zamery-browser`.
 
-The `v0.2.3` release candidate uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Its exact XPI/source tuple is verified; final stable promotion waits only on refreshed clean-distribution and signed real-profile acceptance. See the release status for exact evidence.
+Stable `v0.2.3` uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Signed real-profile cooperative-background acceptance and clean published-artifact acceptance both pass. See the release status for exact evidence.
 
 ## Why this exists
 

@@ -56,7 +56,7 @@ npx @zamery/browser-firefox doctor            # non-mutating health report (--js
 
 ## Firefox companion
 
-The Firefox path requires the Mozilla-signed **Zamery Browser Companion** and the local Native Messaging host. Companion `0.2.3` is public on AMO; the repository's current source candidate is `0.2.5`, which still needs its signed artifact and release evidence before promotion as the stable browser build.
+The Firefox path requires the Mozilla-signed **Zamery Browser Companion** and the local Native Messaging host. Stable companion `0.2.5` is public on AMO and is the accepted browser build for Zamery Browser `v0.2.3`.
 
 The companion keeps attention separate from authority. Pre-auth access requests, credential hand-off, resume requests, origin confirmation and live rebind waits can raise a toolbar badge. OS notifications are optional and only enabled from an explicit popup gesture; notification clicks only focus Firefox/open the panel and never grant, Resume or confirm a site. The popup's **Manage access** action can only reduce an existing grant; expansion goes through the explicit Share flow.
 

@@ -4,7 +4,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**`v0.2.3` release candidate signed and public.** npm `latest` is `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`; companion `0.2.5` is Mozilla-signed/public on AMO and source-compatible with the accepted candidate. The exact signed XPI/source tuple is verified. Final stable promotion is pending only the refreshed clean-distribution run and signed real-profile cooperative-background acceptance. The previously accepted stable `v0.2.2` evidence remains in `docs/evidence/stable-release-2026-10-06.json`.
+**Stable `v0.2.3` accepted.** npm `latest` is `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`; companion `0.2.5` is Mozilla-signed/public on AMO and source-compatible with the accepted tree. The exact signed XPI/source tuple is verified. Signed real-profile cooperative-background acceptance passed on Firefox 157: an OS-level trusted input produced `INPUT-true`, invalidated the old observation with `STALE_ELEMENT_REF / user_interaction`, kept control `agent_claimed`, and a fresh snapshot continued without Resume. Clean published-artifact acceptance passed for the final tuple. Durable evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
 
 Companion `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. AMO version `6547131`, file `5091270`, XPI SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; `pnpm release:tuple --xpi` verifies Mozilla signature presence and exact source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. Candidate evidence is in `docs/evidence/v0.2.3-signed-companion-2026-10-06.json`.
 
@@ -19,13 +19,13 @@ Companion `0.2.5` includes the completed visible branding and the cooperative ba
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
 | **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
-| **Real authenticated Firefox profile** | Signed companion `0.2.2` on `default-release`; rebind stayed user-controlled; attention requested/deduped before access; explicit Share bound the grant; Manage Access reduced a three-tab scope to two and the removed Facebook tab immediately became `outside_scope` while Zamery Center stayed usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
-| Packaging | Stable npm tuple installed without a repository checkout on clean GitHub-hosted macOS 26.6.2 arm64; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Actions run `37417918059`. |
+| **Real authenticated Firefox profile** | Signed companion `0.2.5` on `default-release`; explicit rebind after update preserved the fixed-duration approval; OS-level trusted input on an agent-owned localhost tab produced `INPUT-true`, invalidated the stale observation, kept background control `agent_claimed`, and allowed a fresh snapshot without Resume. Earlier attention/auth scope-reduction behavior remains evidenced by `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
+| Packaging | Final npm tuple installed without a repository checkout on a clean GitHub-hosted macOS runner; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Final run id is recorded in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
 
-The attention/auth UX source passed the current live Firefox suite 24/24 and AMO lint with 0 errors / 0 warnings. The exact signed `0.2.2` XPI was then verified with `pnpm release:tuple --xpi` and accepted on the real authenticated Firefox profile. Current release evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
+The source passed the current live Firefox suite and AMO lint with 0 errors / 0 warnings. The exact signed `0.2.5` XPI was verified with `pnpm release:tuple --xpi` and accepted on the real authenticated Firefox profile. Current release evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
 
 ## Acceptance matrix (section 18 of the validation review)
 
@@ -34,7 +34,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
 | 1 | Clean macOS distribution install from published pinned packages + signed XPI verification | ✅ | GitHub-hosted clean macOS 26.6.2 arm64, Node 24.19.0, Firefox 155.0.1: exact stable npm tuple installed without repository checkout, dependency tree deduped correctly, Codex recipe shipped, signed XPI SHA/signature verified, native-host setup and doctor passed. Run `37417918059`. This runner did not perform an authenticated live companion session; real signed-browser behavior is evidenced separately in row 2. |
-| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.2` on the user's `default-release` profile preserved the authenticated session. After explicit user Share and then shrink-only Manage Access, the removed Facebook tab failed immediately with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope` while the two Zamery Center tabs remained usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
+| 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.5` runs on the user's `default-release` profile. Rebind after the signed update preserved approval semantics; previous shrink-only scope acceptance remains valid and is supplemented by the `0.2.5` trusted-input background-control acceptance. Evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
 | 5 | Duration: session, presets, custom bounds, exact deadline; expiry/revoke in queued request and active transfer; restart + rebind | ✅ | Unit bounds; companion expiry/clock-regression/queued-write/mid-transfer revoke; live fixed 3-day grant survives extension reload and Firefox restart as `rebind_required` with the original deadline. |
@@ -65,7 +65,7 @@ Consequence: release acceptance is tied to a tested **Codex surface/build + inst
 
 ## Stable release tuple
 
-Stable `v0.2.2`: `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, `@zamery/pi-browser@0.2.1`, companion `0.2.2`, native wire 2, BrowserProvider protocol 2. Stable package source commit: `edd596886e7cb795bfa7c7ef5cbe42593123dbe0`. Clean published-artifact acceptance: GitHub Actions run `37417918059`. Durable evidence: `docs/evidence/stable-release-2026-10-06.json`.
+Stable `v0.2.3`: `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, `@zamery/pi-browser@0.2.2`, companion `0.2.5`, native wire 2, BrowserProvider protocol 2. Signed XPI SHA-256: `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`. Durable evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. Previous stable `v0.2.2` evidence remains in `docs/evidence/stable-release-2026-10-06.json`.
 
 ## Historical release-candidate tuples
 
@@ -79,7 +79,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-The signed browser artifact gate is closed. Remaining gates are the signed real-profile cooperative-background acceptance on installed Companion `0.2.5` and a refreshed stable-distribution acceptance run using the exact published package/XPI tuple. After both pass, create the stable GitHub `v0.2.3` release and record the final evidence.
+No stable release gate remains open for the scoped `v0.2.3` release. The exact npm tuple, Mozilla-signed/public Companion `0.2.5`, signed real-profile cooperative-background behavior, and clean distribution/install are accepted. Remaining items below are non-blocking coverage limits or deferred scope.
 
 ## Known limitations of the current release scope
 

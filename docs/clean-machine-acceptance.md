@@ -12,7 +12,7 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 | --- | --- |
 | `@zamery/browser-provider` | `0.2.3` |
 | `@zamery/browser-firefox` | `0.2.2` |
-| `@zamery/browser-mcp` | `0.1.1` |
+| `@zamery/browser-mcp` | `0.1.2` |
 | `@zamery/pi-browser` | `0.2.2` |
 | Signed XPI | `zamery-browser-companion-0.2.5.xpi` · SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c` · AMO version `6547131`, file `5091270` |
 | Companion | `0.2.5`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
@@ -36,7 +36,7 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 
 ```bash
 mkdir ~/zamery-stable && cd ~/zamery-stable && npm init -y
-npm i --save-exact @zamery/browser-provider@0.2.3 @zamery/browser-firefox@0.2.2 @zamery/browser-mcp@0.1.1 @zamery/pi-browser@0.2.2
+npm i --save-exact @zamery/browser-provider@0.2.3 @zamery/browser-firefox@0.2.2 @zamery/browser-mcp@0.1.2 @zamery/pi-browser@0.2.2
 npm ls --all | grep zamery            # exact versions, no duplicates
 npx zamery-browser-firefox setup --dry-run
 npx zamery-browser-firefox setup
@@ -60,7 +60,7 @@ Record the doctor output. Expected: no `fail` other than "no live session".
    (The tarball ships `codex/`; if it does not, record a packaging bug.)
 2. Register the server with the **pinned** package:
    ```bash
-   codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@0.1.1
+   codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@0.1.2
    ```
 3. Start Codex. Ask: *"Call browser_status."* Expected: connected, access revoked, instructions to share from the panel. Record initialize time (Codex shows tool availability within its 10 s startup limit).
 
