@@ -2,11 +2,13 @@
 
 This directory contains the metadata and release checklist for the public addons.mozilla.org listing of **Zamery Browser Companion**.
 
-Current public AMO version: `0.2.3` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. Mozilla automated screening approved it for the public listing on 2026-10-06 (AMO version `6546568`). Current source candidate `0.2.5` includes the completed Companion branding plus cooperative background-control behavior. The signed `0.2.2` XPI remains the recorded stable release artifact until a newer exact signed-XPI digest/source tuple is captured in release evidence.
+Current public AMO version: `0.2.5` (companion protocol 2) with stable Gecko ID `zamery-browser-firefox@zamery.local`. It is public at https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/ (AMO version `6547131`, file `5091270`). The accepted XPI SHA-256 is `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; the matching production-source SHA-256 is `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`.
 
-## Why 0.2.5
+## Version history relevant to this release
 
-`0.2.3` is already public on AMO. `0.2.4` was the branding source candidate, but the cooperative background-control fix changed production source bytes before that candidate was promoted. The release candidate therefore advances to `0.2.5`. A listed/signed build always uses a version higher than an already-distributed build so existing installations can move forward rather than attempting to reuse a signed artifact built from different source.
+`0.2.3` made the branded Companion public. `0.2.4` was a transient branding source candidate and was not promoted. `0.2.5` incorporates the cooperative background-control fix and is the accepted Companion for Zamery Browser `v0.2.3`.
+
+The separate `codex/firefox-agent-action-overlay` development lane also used `0.2.5` while it was only an unsigned candidate. Because `0.2.5` is now an immutable public AMO release from `main`, that overlay lane must rebase on current `main` and use a new Companion version before any future submission.
 
 ## Production source boundary
 
@@ -42,7 +44,7 @@ pnpm typecheck
 pnpm dlx web-ext@10.6.0 lint --source-dir <staged-production-source>
 ```
 
-The first listed submission must use `metadata-listed.json` and channel `listed`.
+Listed submissions use `metadata-listed.json` and channel `listed`.
 
 ## Submission
 
@@ -66,4 +68,4 @@ The AMO listing must also identify that the add-on has a privacy policy and use 
 
 ## Release gate
 
-Companion `0.2.3` is approved and public on AMO; `0.2.5` is the current source candidate. Before promoting `0.2.5` as the repository's recorded stable release artifact, capture the exact signed XPI SHA-256 and source tuple with `pnpm release:tuple --xpi <signed-0.2.5.xpi>` and update the durable release evidence. Until then, the signed `0.2.2` XPI remains the recorded stable artifact.
+Companion `0.2.5` is approved/public on AMO and is the accepted browser artifact for Zamery Browser `v0.2.3`. Exact XPI/source provenance, signed real-profile behavior and clean published-artifact acceptance are recorded in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
