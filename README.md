@@ -61,6 +61,8 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 Stable release `v0.2.2` uses `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`, plus Mozilla-signed Firefox companion `0.2.2`. Published-artifact installation passed on a clean GitHub-hosted macOS runner, and the signed companion separately passed real authenticated-profile acceptance on Firefox 157. See the release status for exact evidence and remaining scope limits.
 
+The exact stable versions are public now. npm's unversioned `latest` aliases are still being promoted because npm keeps trusted-publisher dist-tag permission separate from publish permission; until that promotion closes, use the exact versions above rather than relying on an unpinned install.
+
 ## Why this exists
 
 Browser automation often hides important distinctions: whether the browser is user-owned, whether an action really happened, whether a DOM reference is still fresh, or whether a timeout occurred before or after mutation began. Zamery Browser keeps those boundaries explicit.
