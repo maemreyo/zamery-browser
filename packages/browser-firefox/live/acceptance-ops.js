@@ -3,6 +3,16 @@
 // same internal functions the popup uses, so the live run exercises real Firefox APIs, events and content scripts
 // without needing UI automation of the toolbar popup.
 
+let acceptanceCaptureGate = null;
+globalThis.ZameryAcceptanceCaptureGate = Object.freeze({
+  async waitBeforeCapture() {
+    const gate = acceptanceCaptureGate;
+    if (!gate) return;
+    gate.entered = true;
+    await gate.release;
+  },
+});
+
 async function executeAcceptanceOp(op, params) {
   const slim = (tab) => ({ id: tab.id, url: tab.url, title: tab.title, active: tab.active, pinned: tab.pinned, groupId: tab.groupId, windowId: tab.windowId, index: tab.index, incognito: tab.incognito });
   switch (op) {
@@ -35,6 +45,28 @@ async function executeAcceptanceOp(op, params) {
       const [result] = await browser.tabs.executeScript(params.tab_id, { code: String(params.code), runAt: "document_idle" });
       return { result: result ?? null };
     }
+    case "acceptance_capture_raw": {
+      // Acceptance-only pixel probe. This deliberately bypasses the product screenshot coordinator so the
+      // live suite can prove the presentation is visible before separately proving product capture suppresses it.
+      const rect = params.rect && typeof params.rect === "object" ? {
+        x: Number(params.rect.x), y: Number(params.rect.y), width: Number(params.rect.width), height: Number(params.rect.height),
+      } : undefined;
+      const dataUrl = await browser.tabs.captureTab(Number(params.tab_id), { format: "png", scale: 1, ...(rect ? { rect } : {}) });
+      return { data_url: dataUrl };
+    }
+    case "acceptance_capture_gate_arm": {
+      if (acceptanceCaptureGate) throw new Error("acceptance capture gate already armed");
+      let release;
+      acceptanceCaptureGate = { entered: false, release: new Promise((resolve) => { release = resolve; }), resolve: release };
+      return { armed: true };
+    }
+    case "acceptance_capture_gate_status": return { armed: Boolean(acceptanceCaptureGate), entered: acceptanceCaptureGate?.entered === true };
+    case "acceptance_capture_gate_release": {
+      const gate = acceptanceCaptureGate;
+      acceptanceCaptureGate = null;
+      gate?.resolve?.();
+      return { released: Boolean(gate), entered: gate?.entered === true };
+    }
     case "acceptance_reload_extension": setTimeout(() => browser.runtime.reload(), 200); return { reloading: true };
     case "acceptance_private_window": {
       const win = await browser.windows.create({ incognito: true, url: params.url });
@@ -42,6 +74,32 @@ async function executeAcceptanceOp(op, params) {
     }
     case "acceptance_windows": return { windows: await browser.windows.getAll() };
     case "acceptance_pending_origin": return { pending: { ...pendingOriginChanges } };
+    case "acceptance_set_agent_presence": {
+      agentPresenceEnabled = params.enabled !== false;
+      await persistAgentPresencePreference();
+      if (!agentPresenceEnabled) clearAgentPresenceForTabs(authorizedTabIds(), "preference_disabled");
+      await syncAgentPresenceForAuthorizedTabs();
+      return { enabled: agentPresenceEnabled };
+    }
+    case "acceptance_presence_debug": {
+      const [result] = await browser.tabs.executeScript(Number(params.tab_id), {
+        code: "globalThis.ZameryAcceptancePresenceDebug?.snapshot?.() || null",
+        runAt: "document_idle",
+      });
+      return { presence: result ?? null };
+    }
+    case "acceptance_presence_control": {
+      const forceReducedMotion = params.force_reduced_motion === true;
+      const throwAnimation = params.throw_animation === true;
+      const code = `globalThis.ZameryAcceptancePresenceControl = ${JSON.stringify({ forceReducedMotion, throwAnimation })}; globalThis.ZameryAcceptancePresenceControl`;
+      const [result] = await browser.tabs.executeScript(Number(params.tab_id), { code, runAt: "document_idle" });
+      return { control: result ?? null };
+    }
+    case "acceptance_set_zoom": {
+      const factor = Number(params.factor);
+      await browser.tabs.setZoom(Number(params.tab_id), factor);
+      return { zoom: await browser.tabs.getZoom(Number(params.tab_id)) };
+    }
     default: return undefined;
   }
 }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zamery Browser Companion (Development)",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Development identity for Zamery Browser Companion: explicit Firefox sharing for local AI agents.",
   "icons": {
     "16": "icons/zamery-16.png",
@@ -49,7 +49,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["asset-discovery-v1.js", "asset-transfer-v1.js", "asset-a1-experimental.js", "content.js"],
+      "js": ["asset-discovery-v1.js", "asset-transfer-v1.js", "asset-a1-experimental.js", "agent-presence.js", "content.js"],
       "all_frames": true,
       "run_at": "document_start"
     }

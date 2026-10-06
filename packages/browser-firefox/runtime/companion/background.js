@@ -2,6 +2,7 @@ const HOST_NAME = "com.zamery.browser_firefox";
 const PROTOCOL_VERSION = 2;
 const CONSENT_STORAGE_KEY = "zameryBrowserFirefoxConsentV1";
 const ATTENTION_PREF_STORAGE_KEY = "zameryBrowserFirefoxAttentionPreferencesV1";
+const AGENT_PRESENCE_PREF_STORAGE_KEY = "zameryBrowserFirefoxAgentPresencePreferencesV1";
 const ATTENTION_NOTIFICATION_ID = "zamery-browser-attention";
 const ATTENTION_TTL_MS = 5 * 60 * 1000;
 const MAX_COMPLETED_REQUESTS = 512;
@@ -74,11 +75,14 @@ let consentPersistedSeenAt = 0;
 const seenAudiences = new Map();
 const pendingOriginChanges = {};
 const interactionGenerations = new Map();
+const agentPresenceDocuments = new Map();
 let lastAgentMutationAt = 0;
 let agentActivationUntil = 0;
 let attention = null;
 let notificationsPreferred = false;
 let notificationsPermissionGranted = false;
+let agentPresenceEnabled = true;
+let agentPresencePresentationRevision = 0;
 
 /** The agent's own tab/window activation must not be mistaken for the user switching away. */
 function markAgentActivation() {
@@ -150,6 +154,21 @@ async function loadAttentionPreferences() {
     notificationsPreferred = false;
   }
   await refreshNotificationPermission();
+}
+
+async function loadAgentPresencePreference() {
+  try {
+    const stored = await browser.storage.local.get(AGENT_PRESENCE_PREF_STORAGE_KEY);
+    agentPresenceEnabled = stored?.[AGENT_PRESENCE_PREF_STORAGE_KEY]?.enabled !== false;
+  } catch {
+    agentPresenceEnabled = true;
+  }
+}
+
+async function persistAgentPresencePreference() {
+  try {
+    await browser.storage.local.set({ [AGENT_PRESENCE_PREF_STORAGE_KEY]: { enabled: agentPresenceEnabled } });
+  } catch {}
 }
 
 async function persistAttentionPreferences() {
@@ -242,6 +261,7 @@ function clearCachesForAuthorityChange() {
   a1AssetRefs.clear();
   a1Transfers.clear();
   a1RequestContexts.clear();
+  agentPresenceDocuments.clear();
   for (const key of Object.keys(pendingOriginChanges)) delete pendingOriginChanges[key];
 }
 
@@ -259,13 +279,21 @@ async function persistConsent() {
 }
 
 function applyControl(event) {
+  const previous = control;
   const result = Policy.transition(control, event, Date.now());
-  if (result.ok) control = result.control;
+  if (result.ok) {
+    control = result.control;
+    if (previous.claimGeneration !== control.claimGeneration
+      && ["takeover", "release", "resume", "scope_reduced"].includes(event?.type)) {
+      clearAgentPresenceForTabs(authorizedTabIds(), event.type);
+    }
+  }
   return result;
 }
 
 /** The user (or expiry) ended consent entirely. */
 function endAuthority(reason, state = "revoked") {
+  clearAgentPresenceForTabs(authorizedTabIds(), reason);
   consent = null;
   binding = null;
   lastEnd = { state, reason, at: Date.now() };
@@ -278,6 +306,7 @@ function endAuthority(reason, state = "revoked") {
 /** The live binding is gone but fixed-duration consent may still be valid; the user must rebind explicitly. */
 function dropBinding(reason) {
   if (consent && consent.mode === "fixed" && !Policy.consentExpired(consent, Date.now())) {
+    clearAgentPresenceForTabs(authorizedTabIds(), reason);
     binding = null;
     lastEnd = { state: "rebind_required", reason, at: Date.now() };
     applyControl({ type: "rebind_required", reason });
@@ -439,6 +468,7 @@ function authorizationStatus(options = {}) {
       notifications_preferred: notificationsPreferred,
       notifications_permission: notificationsPermissionGranted,
       notifications_enabled: notificationsPreferred && notificationsPermissionGranted,
+      agent_presence_enabled: agentPresenceEnabled,
       audience_id: consent?.enrolledConsumerId ?? null,
       handoff_note: control.state === "user_control" && control.reason === "agent_requested" ? handoffNote : "",
       rebind: consent && !binding ? { origins: consent.scopeSummary.origins, count: consent.scopeSummary.count } : null,
@@ -471,15 +501,9 @@ function currentAudience() {
   return binding?.audienceId ?? null;
 }
 
-async function contextAuthorization(contextId, action = "inspect") {
-  const tabId = tabIdFromContext(contextId);
+function contextAuthorizationCurrent(tabId, tab, action = "inspect") {
   ensureAuthorityCurrent();
   if (!binding) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "rebind_required");
-  const tab = await browser.tabs.get(tabId).catch(() => null);
-  if (!tab) {
-    if (binding.scope.tabs[String(tabId)]) removeTabFromScope(tabId, "tab_closed");
-    throw newError("BROWSER_CONTEXT_GONE", "Firefox tab is no longer available", "tab_closed");
-  }
   const verdict = Policy.evaluateTabAccess({ scope: binding.scope, actions: binding.actions, pendingOrigins: pendingOriginChanges }, tab, action);
   if (!verdict.ok) {
     // Leaving the authorized group ends group-derived access for good: re-entering does not restore it.
@@ -489,8 +513,21 @@ async function contextAuthorization(contextId, action = "inspect") {
   return { tabId, tab };
 }
 
+async function contextAuthorization(contextId, action = "inspect") {
+  const tabId = tabIdFromContext(contextId);
+  ensureAuthorityCurrent();
+  if (!binding) throw denial("BROWSER_AUTHORIZATION_REQUIRED", "rebind_required");
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  if (!tab) {
+    if (binding.scope.tabs[String(tabId)]) removeTabFromScope(tabId, "tab_closed");
+    throw newError("BROWSER_CONTEXT_GONE", "Firefox tab is no longer available", "tab_closed");
+  }
+  return contextAuthorizationCurrent(tabId, tab, action);
+}
+
 function removeTabFromScope(tabId, reason) {
   if (!binding) return;
+  clearAgentPresenceForTabs([tabId], reason);
   const key = String(tabId);
   if (binding.scope.tabs[key]) {
     const { [key]: _removed, ...rest } = binding.scope.tabs;
@@ -507,6 +544,7 @@ function removeTabFromScope(tabId, reason) {
 }
 
 function dropTabCaches(tabId) {
+  agentPresenceDocuments.delete(tabId);
   for (const [ref, asset] of assetV1Refs) if (asset.tab_id === tabId) assetV1Refs.delete(ref);
   for (const [handle, transfer] of assetV1Transfers) if (transfer.tab_id === tabId) assetV1Transfers.delete(handle);
   for (const [requestId, target] of assetV1RequestContexts) if (target.tab_id === tabId) assetV1RequestContexts.delete(requestId);
@@ -536,6 +574,7 @@ async function bootstrapIdentity() {
     browserInstanceId ||= crypto.randomUUID();
   }
   await loadAttentionPreferences();
+  await loadAgentPresencePreference();
   await loadStoredConsent();
   await syncAttentionUi(false);
   if (!authorityTimer) authorityTimer = setInterval(authorityTick, AUTHORITY_TICK_MS);
@@ -903,6 +942,87 @@ async function armAllFrames(tabId) {
   await browser.tabs.sendMessage(tabId, { type: "zamery_browser_firefox_arm" }).catch(() => undefined);
 }
 
+function agentPresenceScopeValid(tabId) {
+  return Boolean(
+    agentPresenceEnabled
+    && binding?.scope?.tabs?.[String(tabId)]
+    && !pendingOriginChanges[String(tabId)]
+    && control.state === "agent_claimed"
+    && control.claimedContextId === contextIdFor(tabId),
+  );
+}
+
+async function ensureAgentPresenceOnExistingContent(tabId, ping) {
+  if (!ping || ping.agent_presence_v1_ready === true) return ping;
+  try {
+    await browser.tabs.executeScript(tabId, {
+      file: "agent-presence.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    return await browser.tabs.sendMessage(tabId, { type: "zamery_browser_firefox_ping" }, PRIMARY_DOCUMENT_TARGET);
+  } catch {
+    return ping;
+  }
+}
+
+async function syncAgentPresence(tabId, ping) {
+  if (!ping?.agent_presence_v1_ready || !ping.document_id) return;
+  const presentationRevision = ++agentPresencePresentationRevision;
+  agentPresenceDocuments.set(tabId, {
+    documentId: ping.document_id,
+    browserDocumentId: ping.browser_document_id || null,
+  });
+  await browser.tabs.sendMessage(tabId, {
+    type: "zamery_browser_firefox_presence_sync",
+    expected_document_id: ping.document_id,
+    enabled: agentPresenceEnabled,
+    scope_valid: agentPresenceScopeValid(tabId),
+    control_revision: control.claimGeneration,
+    presentation_epoch: browserRunEpoch,
+    presentation_revision: presentationRevision,
+  }, primaryDocumentTarget(ping.browser_document_id)).catch(() => undefined);
+}
+
+function clearAgentPresenceForTabs(tabIds, reason) {
+  const presentationRevision = ++agentPresencePresentationRevision;
+  const controlRevision = control.claimGeneration;
+  for (const tabId of tabIds || []) {
+    const knownDocument = agentPresenceDocuments.get(tabId);
+    void (async () => {
+      let document = knownDocument;
+      if (!document?.documentId) {
+        const ping = await browser.tabs.sendMessage(
+          tabId,
+          { type: "zamery_browser_firefox_ping" },
+          PRIMARY_DOCUMENT_TARGET,
+        ).catch(() => null);
+        if (ping?.document_id) {
+          document = { documentId: ping.document_id, browserDocumentId: ping.browser_document_id || null };
+        }
+      }
+      if (!document?.documentId) return;
+      await browser.tabs.sendMessage(tabId, {
+        type: "zamery_browser_firefox_presence_clear",
+        reason: String(reason || "control_changed"),
+        expected_document_id: document.documentId,
+        control_revision: controlRevision,
+        presentation_epoch: browserRunEpoch,
+        presentation_revision: presentationRevision,
+      }, primaryDocumentTarget(document.browserDocumentId)).catch(() => undefined);
+    })();
+  }
+}
+
+async function syncAgentPresenceForAuthorizedTabs() {
+  const ids = [...authorizedTabIds()];
+  await Promise.all(ids.map(async (tabId) => {
+    const ping = await ensureContent(tabId).catch(() => null);
+    if (ping) await syncAgentPresence(tabId, ping);
+  }));
+}
+
 async function ensureContent(tabId, options = {}) {
   const ping = { type: "zamery_browser_firefox_ping", ...(options.arm ? { arm: true } : {}) };
   let response;
@@ -910,6 +1030,7 @@ async function ensureContent(tabId, options = {}) {
     response = await browser.tabs.sendMessage(tabId, ping, PRIMARY_DOCUMENT_TARGET);
   } catch (firstError) {
     try {
+      await browser.tabs.executeScript(tabId, { file: "agent-presence.js", allFrames: false, runAt: "document_idle" });
       await browser.tabs.executeScript(tabId, { file: "content.js", allFrames: false, runAt: "document_idle" });
       response = await browser.tabs.sendMessage(tabId, ping, PRIMARY_DOCUMENT_TARGET);
     } catch (error) {
@@ -919,6 +1040,8 @@ async function ensureContent(tabId, options = {}) {
       throw wrapped;
     }
   }
+  response = await ensureAgentPresenceOnExistingContent(tabId, response);
+  await syncAgentPresence(tabId, response);
   if (options.arm) await armAllFrames(tabId);
   return response;
 }
@@ -930,7 +1053,7 @@ async function ensureAssetDiscoveryContent(tabId) {
       { type: "zamery_browser_firefox_ping" },
       { frameId: 0 },
     );
-    if (ping?.asset_discovery_v1_ready) return ping;
+    if (ping?.asset_discovery_v1_ready) return ensureAgentPresenceOnExistingContent(tabId, ping);
   } catch {}
   try {
     await browser.tabs.executeScript(tabId, {
@@ -941,6 +1064,12 @@ async function ensureAssetDiscoveryContent(tabId) {
     });
     await browser.tabs.executeScript(tabId, {
       file: "asset-transfer-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "agent-presence.js",
       frameId: 0,
       allFrames: false,
       runAt: "document_idle",
@@ -1108,7 +1237,7 @@ async function ensureAssetTransferContent(tabId) {
   } catch {
     ping = null;
   }
-  if (ping?.asset_transfer_v1_ready) return ping;
+  if (ping?.asset_transfer_v1_ready) return ensureAgentPresenceOnExistingContent(tabId, ping);
   if (ping) {
     const error = new Error("browser asset transfer helper is not loaded in the current document");
     error.code = "BROWSER_ASSET_FETCH_FAILED";
@@ -1124,6 +1253,12 @@ async function ensureAssetTransferContent(tabId) {
     });
     await browser.tabs.executeScript(tabId, {
       file: "asset-transfer-v1.js",
+      frameId: 0,
+      allFrames: false,
+      runAt: "document_idle",
+    });
+    await browser.tabs.executeScript(tabId, {
+      file: "agent-presence.js",
       frameId: 0,
       allFrames: false,
       runAt: "document_idle",
@@ -1352,7 +1487,7 @@ async function ensureA1Content(tabId) {
       { type: "zamery_browser_firefox_ping" },
       { frameId: 0 },
     );
-    if (ping?.a1_asset_experiment_ready) return ping;
+    if (ping?.a1_asset_experiment_ready) return ensureAgentPresenceOnExistingContent(tabId, ping);
     const error = new Error("A1 asset helper is not loaded in the current document");
     error.code = "BROWSER_ASSET_EXPERIMENT_UNAVAILABLE";
     error.reason = "development_companion_or_document_requires_reload";
@@ -1362,6 +1497,12 @@ async function ensureA1Content(tabId) {
     try {
       await browser.tabs.executeScript(tabId, {
         file: "asset-a1-experimental.js",
+        frameId: 0,
+        allFrames: false,
+        runAt: "document_idle",
+      });
+      await browser.tabs.executeScript(tabId, {
+        file: "agent-presence.js",
         frameId: 0,
         allFrames: false,
         runAt: "document_idle",
@@ -2157,6 +2298,7 @@ async function manageAccessFromPopup(message) {
   }
   for (const tabId of currentTabIds) {
     if (nextTabs[String(tabId)]) continue;
+    clearAgentPresenceForTabs([tabId], "scope_reduced_by_user");
     ownedTabIds.delete(tabId);
     interactionGenerations.delete(tabId);
     dropTabCaches(tabId);
@@ -2215,6 +2357,16 @@ browser.runtime.onMessage.addListener((message, sender) => {
   }
 
   if (!popupOnly(sender)) return undefined;
+
+  if (message.type === "zamery_browser_firefox_set_agent_presence") {
+    return (async () => {
+      agentPresenceEnabled = message.enabled !== false;
+      await persistAgentPresencePreference();
+      if (!agentPresenceEnabled) clearAgentPresenceForTabs(authorizedTabIds(), "preference_disabled");
+      await syncAgentPresenceForAuthorizedTabs();
+      return { ok: true, ...authorizationStatus({ detail: "popup" }) };
+    })();
+  }
 
   if (message.type === "zamery_browser_firefox_set_notifications") {
     return (async () => {

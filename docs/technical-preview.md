@@ -8,6 +8,8 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 Companion `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. AMO version `6547131`, file `5091270`, XPI SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; `pnpm release:tuple --xpi` verifies Mozilla signature presence and exact source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. Candidate evidence is in `docs/evidence/v0.2.3-signed-companion-2026-10-06.json`.
 
+Post-stable release candidate `v0.2.4` keeps provider/MCP/Pi versions unchanged, bumps `@zamery/browser-firefox` to `0.2.3`, and uses unsigned Companion `0.2.6`. It adds advisory exact-target agent action cues and screenshot suppression without changing BrowserProvider V2 or native wire protocol 2. The rebased candidate passes `@zamery/browser-firefox` 232/232, the full `pnpm verify` gate, live Firefox 157 acceptance 31/31, and AMO lint with 0 errors / 0 warnings / 0 notices. Staged production-source SHA-256 is `b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9`. It is not yet a stable release because no signed `0.2.6` XPI/source tuple has been captured.
+
 ## What exists (by layer)
 
 | Layer | Evidence |
@@ -15,17 +17,17 @@ Companion `0.2.5` includes the completed visible branding and the cooperative ba
 | Unit (policy: duration bounds, consent lifecycle, scope evaluation, control state machine) | `packages/browser-firefox/test/policy.test.mjs` |
 | Real native-host process (journal privacy/migration/horizon/lock, coalescing, mutation status, protocol gate) | `test/native-host.test.mjs` — real `native-host.mjs` + native-messaging framing + UDS |
 | Companion in a VM against fake Firefox APIs (authorization scope, replay/revoke, restart/rebind, control, groups, tabs, screenshots, artifacts) | `test/companion.test.mjs`, `groups-and-tabs.test.mjs`, `artifacts.test.mjs` |
-| Content script in jsdom (snapshot privacy, credential fields, readable text) | `test/content-snapshot.test.mjs`; popup states: `test/popup.test.mjs` |
+| Content/presentation script in jsdom (snapshot privacy, credential fields, readable text, exact-target cues, reduced motion, stale callback cleanup, multi-token suppression) | `test/content-snapshot.test.mjs`, `test/agent-presence.test.mjs`; popup states: `test/popup.test.mjs` |
 | Full stack: provider → UDS broker → real host → real companion code → fake browser | `test/provider-stack.test.mjs`, `provider-artifacts.test.mjs`, `doctor.test.mjs` |
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
-| **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
+| **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; current post-stable candidate passes 31/31, including background control plus overlay/pixel suppression acceptance. Evidence: `docs/evidence/live-firefox-agent-action-overlay-2026-10-06.json` |
 | **Real authenticated Firefox profile** | Signed companion `0.2.5` on `default-release`; explicit rebind after update preserved the fixed-duration approval; OS-level trusted input on an agent-owned localhost tab produced `INPUT-true`, invalidated the stale observation, kept background control `agent_claimed`, and allowed a fresh snapshot without Resume. Earlier attention/auth scope-reduction behavior remains evidenced by `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
 | Packaging | Final npm tuple installed without a repository checkout on a clean GitHub-hosted macOS runner; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Final run id is recorded in `docs/evidence/stable-release-v0.2.3-2026-10-06.json`. |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
 
-The source passed the current live Firefox suite and AMO lint with 0 errors / 0 warnings. The exact signed `0.2.5` XPI was verified with `pnpm release:tuple --xpi` and accepted on the real authenticated Firefox profile. Current release evidence: `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
+The stable `0.2.5` source passed the current live Firefox suite and AMO lint and its signed XPI was verified with `pnpm release:tuple --xpi` on the real authenticated Firefox profile. The post-stable `0.2.6` candidate separately passes the combined 31/31 live suite and source preflight, but signed-artifact acceptance remains open. Stable release evidence remains `docs/evidence/stable-release-v0.2.3-2026-10-06.json`.
 
 ## Acceptance matrix (section 18 of the validation review)
 
@@ -41,7 +43,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 6 | Restart / rebind semantics | ✅ | Live extension reload + Firefox restart. |
 | 7 | Takeover/resume incl. MFA, manual click/navigation, SPA, focus switch, popup, background control, same-node edit | ✅ | Live: credential hand-off, **trusted** (Marionette-synthesized) key and click, manual navigation, SPA staleness, origin change, interactive tab switch, page popup not shared, plus explicit background mode acting on the exact shared tab while another tab remains foreground with no focus theft/retarget. In background mode, trusted key/click now invalidate the old observation while keeping the claim active; a fresh snapshot continues without Resume. Take over/Resume/revoke, credential refusal and origin confirmation remain hard boundaries. Same-node edit freshness is also covered in the VM. Native OS dialogs/passkeys are out of scope. |
 | 8 | Tab lifecycle: create/navigate/reload/close owned, user close refused, no duplicate create on recovery | ✅ | Live (repeat of the same request id opens one tab). |
-| 9 | Screenshot + model vision | ✅ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. The supported Codex configuration includes the shipped recipe, which makes Codex open the returned local image file before describing pixels; live Firefox + Codex 0.160.0 passed 3/3 with that recipe. Without it this bridge guessed incorrectly 0/2. DPR ≠ 1, scrolled-viewport and resize races remain coverage gaps rather than release blockers. |
+| 9 | Screenshot + model vision | ✅ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. Post-stable `0.2.6` source acceptance additionally proves an active action cue is visible in raw Firefox pixels (1,941 matching pixels) yet absent from product capture (0), background capture stays clean without focus theft, and a new action dispatched while capture suppression is pending also leaves 0 overlay pixels in the artifact. The supported Codex configuration includes the shipped recipe, which makes Codex open the returned local image file before describing pixels; live Firefox + Codex 0.160.0 passed 3/3 with that recipe. DPR ≠ 1, scrolled-viewport and resize races remain coverage gaps rather than release blockers. |
 | 10 | MCP / native-host failure recovery | ✅ | MCP child SIGKILL → new child keeps the grant, observations fresh; host killed mid-action → `outcome_unknown`, secret never on disk; extension reload live. Codex-host restart recovery is not measured (it depends on the Codex surface). |
 | 11 | Revoke during queued / read / transfer / mutation | ✅ | Companion VM + full-stack tests (queued write not dispatched, read discarded, mutation reports safe status, artifact dropped). |
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
@@ -81,6 +83,8 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 No stable release gate remains open for the scoped `v0.2.3` release. The exact npm tuple, Mozilla-signed/public Companion `0.2.5`, signed real-profile cooperative-background behavior, and clean distribution/install are accepted. Remaining items below are non-blocking coverage limits or deferred scope.
 
+For post-stable candidate `v0.2.4`, the remaining gates are the exact Mozilla-signed Companion `0.2.6` XPI/source tuple, signed real-profile upgrade acceptance, and clean distribution acceptance after `@zamery/browser-firefox@0.2.3` is published.
+
 ## Known limitations of the current release scope
 
 - Detection of human activity is best-effort: trusted gestures and manual navigation invalidate prior observations in both control modes. In `interactive` mode they hand control to the user; in explicit `background` mode ordinary same-origin activity keeps the claim alive and requires a fresh snapshot instead. Tab/window switches are also ignored in `background`. Credential fields, cross-origin confirmation and the panel's *Take over* remain hard handoff boundaries. OS-level dialogs and some gestures are not detected.
@@ -89,6 +93,7 @@ No stable release gate remains open for the scoped `v0.2.3` release. The exact n
 - The consumer id is a routing key, not an authenticated identity (same-OS-user trust boundary).
 - A page-opened popup is never auto-shared; the user shares it explicitly.
 - OS notifications are optional. If permission is absent/revoked or Firefox cannot open the popup from a notification click, the toolbar badge remains the fallback and the user opens the panel manually.
+- Agent-action highlighting covers the exact top-frame action target only. It is advisory presentation, and fullscreen/dialog/top-layer UI may cover it; the live modal probe records that limitation rather than claiming guaranteed topmost rendering.
 
 ## Deferred (P2/P3, not part of the current release)
 

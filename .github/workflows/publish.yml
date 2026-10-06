@@ -110,7 +110,7 @@ jobs:
 
           publish_one '@zamery/browser-provider' '0.2.3' 'zamery-browser-provider-*.tgz'
           publish_one '@zamery/pi-browser' '0.2.2' 'zamery-pi-browser-*.tgz'
-          publish_one '@zamery/browser-firefox' '0.2.2' 'zamery-browser-firefox-*.tgz'
+          publish_one '@zamery/browser-firefox' '0.2.3' 'zamery-browser-firefox-*.tgz'
           publish_one '@zamery/browser-mcp' '0.1.2' 'zamery-browser-mcp-*.tgz'
 
       - name: Validate MCP Registry metadata

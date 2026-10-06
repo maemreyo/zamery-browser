@@ -129,6 +129,7 @@ function renderAttention(status) {
   if (!supported) $("#notify-detail").textContent = "OS notifications are unavailable here. Toolbar alerts still work.";
   else if (status.notifications_preferred && !status.notifications_permission) $("#notify-detail").textContent = "Firefox notification permission is off. Toolbar alerts still work.";
   else $("#notify-detail").textContent = "Toolbar alerts still work if notifications are off.";
+  $("#show-agent-actions").checked = status.agent_presence_enabled !== false;
 }
 
 async function renderManageAccess(status) {
@@ -431,6 +432,20 @@ $("#notify-attention").addEventListener("change", async () => {
   }
   await refresh();
   if (failure) $("#error").textContent = failure;
+});
+
+$("#show-agent-actions").addEventListener("change", async () => {
+  const toggle = $("#show-agent-actions");
+  toggle.disabled = true;
+  try {
+    const result = await send({ type: "zamery_browser_firefox_set_agent_presence", enabled: toggle.checked });
+    if (result?.ok === false) $("#error").textContent = "Could not update the agent action display setting.";
+  } catch {
+    $("#error").textContent = "Could not update the agent action display setting.";
+  } finally {
+    toggle.disabled = false;
+    await refresh();
+  }
 });
 
 $("#grant").addEventListener("click", () => {
