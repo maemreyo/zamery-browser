@@ -13,7 +13,7 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 | `@zamery/browser-mcp` | `0.1.0-rc.3` |
 | Signed XPI | **pending** — must be a Mozilla-signed `0.2.1` artifact matching the release tuple |
 | Companion | `0.2.1`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
-| Release git SHA | fill from the final clean release commit |
+| Release git SHA | `70835abbd3f1dfc5722062813a3d003066f1658a` |
 | macOS / arch | record: `sw_vers`, `uname -m` |
 | Firefox | record the version (≥ 142) |
 | Node | record `node -v` (≥ 22.19 < 25), and the **absolute path** that `which node` prints |
