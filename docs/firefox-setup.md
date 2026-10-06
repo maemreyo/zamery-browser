@@ -5,7 +5,7 @@
 1. the **Zamery Browser Companion** WebExtension (Mozilla-signed);
 2. a local Native Messaging host installed by `@zamery/browser-firefox`.
 
-> **Technical preview status.** The accepted attention/auth UX candidate uses Mozilla-signed companion `0.2.2` (AMO version `6546104`, file `5090243`, SHA-256 `56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9`) and the matching published npm RC tuple. Signed real-profile acceptance passed on Firefox 157. The clean-machine macOS gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`); it was not passed. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
+> **Stable release status.** Zamery Browser `v0.2.2` uses Mozilla-signed companion `0.2.2` (AMO version `6546104`, file `5090243`, SHA-256 `56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9`) with `@zamery/browser-firefox@0.2.1`. Published-artifact installation passed on clean macOS 26.6.2 arm64; signed real-profile acceptance passed separately on Firefox 157. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
 
 ## 1. Install the native host
 

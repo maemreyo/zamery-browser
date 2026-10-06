@@ -1,10 +1,10 @@
-# Technical preview status
+# Release status
 
 Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts), desktop Firefox ≥ 142, DOM-synthetic input, no private-window control.
 
 ## Verdict
 
-**Attention/auth UX release candidate accepted with an explicit clean-machine waiver.** The exact npm RC tuple is published under `preview`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree; signed real-profile attention/auth UX acceptance passed on Firefox 157. The clean-machine macOS gate was explicitly waived by the operator on 2026-10-06 (`WAIVED_BY_OPERATOR_2026-10-06`). This is a release exception, not a PASS: community users should treat clean-machine installation as unverified until it is measured separately.
+**Stable `v0.2.2` accepted.** Stable npm artifacts are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
 
 ## What exists (by layer)
 
@@ -18,7 +18,7 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 | MCP: tool contract, in-process full stack, spawned stdio server, child-crash recovery, clean exit | `packages/browser-mcp/test/*.test.mjs` |
 | **Live real Firefox 157** (isolated temp profile, headless, own host name + extension id) | `packages/browser-mcp/live/live.test.mjs`; baseline evidence `docs/evidence/live-firefox-2026-10-05.json`; background-control evidence `docs/evidence/live-firefox-background-2026-10-06.json` |
 | **Real authenticated Firefox profile** | Signed companion `0.2.2` on `default-release`; rebind stayed user-controlled; attention requested/deduped before access; explicit Share bound the grant; Manage Access reduced a three-tab scope to two and the removed Facebook tab immediately became `outside_scope` while Zamery Center stayed usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
-| Packaging | `pnpm pack` of the three packages, installed in an empty project: `zamery-browser-firefox setup/doctor` and `zamery-browser-mcp` start (initialize ≈ 1 s) |
+| Packaging | Stable npm tuple installed without a repository checkout on clean GitHub-hosted macOS 26.6.2 arm64; imports, Codex recipe, signed XPI digest/signature, native-host setup and doctor all passed. Actions run `37417918059`. |
 | Lint of the production companion | `web-ext lint` on the staged source: 0 errors / 0 warnings |
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
@@ -27,11 +27,11 @@ The attention/auth UX source passed the current live Firefox suite 24/24 and AMO
 
 ## Acceptance matrix (section 18 of the validation review)
 
-Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (blocked on something listed below) · WAIVED = explicitly skipped by operator and not claimed as proven.
+Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (blocked on something listed below).
 
 | # | Scenario | Status | Evidence / what is missing |
 | --- | --- | --- | --- |
-| 1 | Clean macOS install from published pinned packages + signed XPI | WAIVED | `WAIVED_BY_OPERATOR_2026-10-06`. This gate was intentionally skipped for this operator-authorized preview release. No clean-machine PASS is claimed. |
+| 1 | Clean macOS distribution install from published pinned packages + signed XPI verification | ✅ | GitHub-hosted clean macOS 26.6.2 arm64, Node 24.19.0, Firefox 155.0.1: exact stable npm tuple installed without repository checkout, dependency tree deduped correctly, Codex recipe shipped, signed XPI SHA/signature verified, native-host setup and doctor passed. Run `37417918059`. This runner did not perform an authenticated live companion session; real signed-browser behavior is evidenced separately in row 2. |
 | 2 | Existing authenticated Firefox, no relaunch/cookie export; unrelated tab inaccessible | ✅ | Signed companion `0.2.2` on the user's `default-release` profile preserved the authenticated session. After explicit user Share and then shrink-only Manage Access, the removed Facebook tab failed immediately with `BROWSER_AUTHORIZATION_REQUIRED / outside_scope` while the two Zamery Center tabs remained usable. Evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`. |
 | 3 | Single-tab grant: other tab ids, snapshot, image, asset, cached ids, titles/URLs, direct broker access denied | ✅ | Live + companion + full-stack. |
 | 4 | Group grant/read/write: snapshot default, opt-in follow, joins/leaves, last-member removal, recreate, cross-window, pinned/split | 🟡 | Live: snapshot default, late joiner, leave/re-enter, structural protection, create/update/move/activate/remove, last-member deletion. VM: follow_group, recreate with same id/title, pinned refusal, cross-window refusal. Not live: follow_group, cross-window, split view. |
@@ -39,7 +39,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 6 | Restart / rebind semantics | ✅ | Live extension reload + Firefox restart. |
 | 7 | Takeover/resume incl. MFA, manual click/navigation, SPA, focus switch, popup, background control, same-node edit | ✅ | Live: credential hand-off, **trusted** (Marionette-synthesized) key and click, manual navigation, SPA staleness, origin change, interactive tab switch, page popup not shared, plus explicit background mode acting on the exact shared tab while another tab remains foreground with no focus theft/retarget. Take over/Resume/revoke, credential refusal and origin confirmation were re-proven in background mode. Same-node edit detection is covered in the VM only (the interaction generation). Native OS dialogs/passkeys are out of scope. |
 | 8 | Tab lifecycle: create/navigate/reload/close owned, user close refused, no duplicate create on recovery | ✅ | Live (repeat of the same request id opens one tab). |
-| 9 | Screenshot + model vision | ✅ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. The supported Codex configuration includes the shipped recipe, which makes Codex open the returned local image file before describing pixels; live Firefox + Codex 0.160.0 passed 3/3 with that recipe. Without it this bridge guessed incorrectly 0/2. DPR ≠ 1, scrolled-viewport and resize races remain coverage gaps rather than preview blockers. |
+| 9 | Screenshot + model vision | ✅ | Live: pixel-verified rect capture, bounded JPEG, expiry on revoke. The supported Codex configuration includes the shipped recipe, which makes Codex open the returned local image file before describing pixels; live Firefox + Codex 0.160.0 passed 3/3 with that recipe. Without it this bridge guessed incorrectly 0/2. DPR ≠ 1, scrolled-viewport and resize races remain coverage gaps rather than release blockers. |
 | 10 | MCP / native-host failure recovery | ✅ | MCP child SIGKILL → new child keeps the grant, observations fresh; host killed mid-action → `outcome_unknown`, secret never on disk; extension reload live. Codex-host restart recovery is not measured (it depends on the Codex surface). |
 | 11 | Revoke during queued / read / transfer / mutation | ✅ | Companion VM + full-stack tests (queued write not dispatched, read discarded, mutation reports safe status, artifact dropped). |
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
@@ -57,11 +57,15 @@ Method: `codex exec` with the MCP server added only through `-c mcp_servers.…`
 3. After that finding `browser_screenshot` returns both the inline image and a local file path by default (and, later, a first line telling the model to open the file before describing it). A fake-Firefox run with these defaults answered correctly once.
 4. **Against the live isolated Firefox, with the shipped defaults and a neutral prompt, Codex answered the heading and URL correctly (from page text) but guessed the colours (*red, green, blue, yellow*) in two runs out of two** — it called `browser_artifact_read` but never opened the file with an image viewer. Only when the prompt itself told it to open the returned local file did it read the pixels. So the model-vision row **fails with default behaviour** on this Codex build/bridge; it is a host/model-behaviour limitation, not a Zamery capture bug (the captured pixels are verified in the live suite).
 
-5. **With the Codex recipe** (`packages/browser-mcp/codex/AGENTS.snippet.md`, placed as `AGENTS.md` in the working directory of `codex exec`, neutral prompt, live isolated Firefox): *red, blue, green, yellow* — correct in 3 runs out of 3 (the model opened the returned file). The recipe is part of the supported Codex configuration for this preview and is shipped both as an AGENTS.md snippet and as `packages/browser-mcp/codex/skill/zamery-browser/SKILL.md`; it is not installed automatically.
+5. **With the Codex recipe** (`packages/browser-mcp/codex/AGENTS.snippet.md`, placed as `AGENTS.md` in the working directory of `codex exec`, neutral prompt, live isolated Firefox): *red, blue, green, yellow* — correct in 3 runs out of 3 (the model opened the returned file). The recipe is part of the supported Codex configuration for this release and is shipped both as an AGENTS.md snippet and as `packages/browser-mcp/codex/skill/zamery-browser/SKILL.md`; it is not installed automatically.
 
-Consequence: preview acceptance is tied to a tested **Codex surface/build + installed recipe** tuple. Inline MCP image forwarding is not required for this preview as long as the returned file path can be opened by the agent's image viewer. Other Codex surfaces/builds need their own visual-question acceptance before being advertised as supported.
+Consequence: release acceptance is tied to a tested **Codex surface/build + installed recipe** tuple. Inline MCP image forwarding is not required as long as the returned file path can be opened by the agent's image viewer. Other Codex surfaces/builds need their own visual-question acceptance before being advertised as supported.
 
-## Release-candidate tuple
+## Stable release tuple
+
+Stable `v0.2.2`: `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, `@zamery/pi-browser@0.2.1`, companion `0.2.2`, native wire 2, BrowserProvider protocol 2. Stable package source commit: `edd596886e7cb795bfa7c7ef5cbe42593123dbe0`. Clean published-artifact acceptance: GitHub Actions run `37417918059`. Durable evidence: `docs/evidence/stable-release-2026-10-06.json`.
+
+## Historical release-candidate tuples
 
 `pnpm release:tuple` prints the tuple for the working tree: git SHA (+ dirty flag), npm package versions, companion version and a hash of the exact files that would be staged for AMO, signed XPI SHA-256 (with `--xpi`), native wire protocol, BrowserProvider protocol, installed Firefox, Node, macOS build/arch and the Codex CLI. These are different numbers on purpose: package semver, companion version, wire protocol, MCP protocol and provider protocol move independently.
 
@@ -71,11 +75,11 @@ Previous accepted background-control tuple: `@zamery/browser-provider@0.2.2-rc.2
 
 Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamery/browser-firefox@0.2.1-rc.3`, `@zamery/browser-mcp@0.1.0-rc.4`, companion `0.2.2`. It adds provider-neutral access attention, toolbar/optional notification UX, bounded MCP `browser_request_access`, user-only notification navigation, and shrink-only Manage Access. The exact npm RC tuple is published under dist-tag `preview`, fresh-registry smoke passes, the Mozilla-signed XPI/source tuple is verified, and real authenticated-profile attention/auth UX acceptance passes. Durable evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
 
-## What blocks GO
+## Release gate
 
-No remaining release gate is open for this operator-authorized preview candidate. The clean-machine macOS gate was explicitly waived on 2026-10-06; that exception does not convert the gate into a PASS.
+No remaining stable release gate is open. Distribution/install was proven from public pinned artifacts on a clean macOS runner; signed real-profile behavior, exact XPI/source compatibility, live Firefox coverage, AMO lint/signing, unit/contract/integration tests and MCP tests are all recorded separately rather than conflated into one run.
 
-## Known limitations of the preview scope
+## Known limitations of the current release scope
 
 - Detection of human activity is best-effort: trusted gestures on the claimed tab, manual navigation and credential fields are detected in both control modes; tab/window switches hand control to the user in `interactive` mode but are intentionally ignored in explicit `background` mode. OS-level dialogs and some gestures are not detected. The panel's *Take over* is authoritative.
 - Only the top frame is snapshotted; iframes, closed shadow roots, console/network capture, downloads/uploads, native choosers and passkeys are not covered. Containers: the partition is recorded when Firefox exposes `cookieStoreId` (it requires the `cookies` permission, which is deliberately not requested), otherwise it is unknown.
@@ -84,6 +88,6 @@ No remaining release gate is open for this operator-authorized preview candidate
 - A page-opened popup is never auto-shared; the user shares it explicitly.
 - OS notifications are optional. If permission is absent/revoked or Firefox cannot open the popup from a notification click, the toolbar badge remains the fallback and the user opens the panel manually.
 
-## Deferred (P2/P3, not part of the preview)
+## Deferred (P2/P3, not part of the current release)
 
 Bounded console/network observation, iframe and open-shadow traversal, download observation and upload, container UX, an external group/tab event stream, evidence bundles, WebDriver BiDi / OS-level input, native chooser/clipboard/dialog control, video/performance, and a standard WebMCP bridge.
