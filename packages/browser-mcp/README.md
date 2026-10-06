@@ -9,7 +9,7 @@ agent host (stdio) → @zamery/browser-mcp → BrowserProvider V2 + optional int
 
 It does not depend on Pi or Zamery Workbench. It does not expose raw JavaScript/eval, and the agent cannot grant itself access.
 
-> Status: `0.1.2` adds Official MCP Registry discovery metadata with no runtime behavior change from `0.1.1`. Zamery Browser `v0.2.3` uses Mozilla-signed/public Companion `0.2.5`; final product release evidence is tracked in the repository release status.
+> Status: stable `0.1.2`, released with Zamery Browser `v0.2.3` and Mozilla-signed/public Companion `0.2.5`. Clean published-artifact acceptance, signed real-profile acceptance and Official MCP Registry publication all pass.
 
 ## Install
 
@@ -19,7 +19,7 @@ codex mcp add zamery-firefox -- npx -y @zamery/browser-mcp@latest
 
 You also need the Firefox companion and the native host from `@zamery/browser-firefox` (see its README).
 
-Official MCP Registry name: `io.github.maemreyo/zamery-browser`.
+Official MCP Registry: [`io.github.maemreyo/zamery-browser`](https://registry.modelcontextprotocol.io/?q=io.github.maemreyo%2Fzamery-browser).
 
 ## Codex recipe (needed for screenshots)
 

@@ -5,7 +5,7 @@
 1. the **Zamery Browser Companion** WebExtension (Mozilla-signed);
 2. a local Native Messaging host installed by `@zamery/browser-firefox`.
 
-> **Current release candidate.** Zamery Browser `v0.2.3` uses Mozilla-signed/public companion `0.2.5` (AMO version `6547131`, file `5091270`, SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`) with `@zamery/browser-firefox@0.2.2`. The exact XPI/source tuple is verified; final stable promotion still requires the refreshed clean-distribution and signed real-profile acceptance. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
+> **Stable release.** Zamery Browser `v0.2.3` uses Mozilla-signed/public companion `0.2.5` (AMO version `6547131`, file `5091270`, SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`) with `@zamery/browser-firefox@0.2.2`. The exact XPI/source tuple, signed real-profile behavior, clean published-artifact install and Official MCP Registry entry are accepted. Do not mix a protocol-1 companion (`0.1.x`) with a protocol-2 host: every operation fails closed and `doctor` tells you why.
 
 ## 1. Install the native host
 
@@ -18,7 +18,7 @@ This writes the Native Messaging manifest, a launcher with an **absolute Node pa
 
 ## 2. Install the signed companion
 
-Install the signed XPI listed for your release (Firefox asks you to confirm the add-on and its permissions: all-site access, tabs, tab groups). Production extension id: `zamery-browser-firefox@zamery.local`. Restart Firefox once so it starts the new host.
+Install the public [Zamery Browser Companion on AMO](https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/) (Firefox asks you to confirm the add-on and its permissions: all-site access, tabs, tab groups). Stable `v0.2.3` uses Companion `0.2.5`. Production extension id: `zamery-browser-firefox@zamery.local`. Restart Firefox once so it starts the new host.
 
 ## 3. Check
 

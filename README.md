@@ -74,7 +74,7 @@ For Pi integrations, `@zamery/pi-browser` exposes `browser_status`, `browser_con
 
 `@zamery/browser-mcp` lets a local agent work in the Firefox you already use — logged in, no relaunch, no cookie export — on **only the tabs or tab groups you choose to share**, for a time you choose (this session, or 1–30 days). You can take over at any time; the agent can only ask to resume. See [`packages/browser-mcp`](packages/browser-mcp/README.md), the [security model](docs/security-model.md) and the evidence-backed [release status](docs/technical-preview.md).
 
-Official MCP Registry identity: `io.github.maemreyo/zamery-browser`.
+Official MCP Registry: [`io.github.maemreyo/zamery-browser`](https://registry.modelcontextprotocol.io/?q=io.github.maemreyo%2Fzamery-browser). Firefox Companion: [AMO public listing](https://addons.mozilla.org/firefox/addon/f82d5bdb37964220aafe/).
 
 Stable `v0.2.3` uses `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.2`, and `@zamery/pi-browser@0.2.2`, plus Mozilla-signed/public Firefox companion `0.2.5`. Signed real-profile cooperative-background acceptance and clean published-artifact acceptance both pass. See the release status for exact evidence.
 
@@ -107,6 +107,7 @@ The Firefox path uses a Mozilla-signed Zamery Browser Companion plus a Native Me
 - [Community support](SUPPORT.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Brand assets](docs/brand.md)
+- [Community launch kit](docs/community-launch-kit-2026-10-06.md)
 - [Examples](examples/README.md)
 
 ## Project status
