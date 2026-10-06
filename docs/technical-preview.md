@@ -23,6 +23,8 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 `pnpm verify` (build + typecheck + test) is green; CI runs the same.
 
+The attention/auth UX source candidate also passed the current live Firefox suite 24/24 and AMO lint with 0 errors / 0 warnings. This is source-level evidence only; signed `0.2.2` acceptance remains pending. Pre-release evidence: `docs/evidence/attention-auth-ux-pre-release-2026-10-06.json`.
+
 ## Acceptance matrix (section 18 of the validation review)
 
 Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (blocked on something listed below) · WAIVED = explicitly skipped by operator and not claimed as proven.
