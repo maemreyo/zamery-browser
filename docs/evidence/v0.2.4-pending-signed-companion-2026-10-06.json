@@ -1,0 +1,59 @@
+{
+  "at": "2026-10-06T14:22:00Z",
+  "status": "SOURCE_MERGED_PENDING_SIGNED_COMPANION_AND_PUBLISH",
+  "release_candidate": {
+    "root_version": "0.2.4",
+    "source_commit": "c204ba7b84e4547c5c0a42b477ec9a26069c4ef3",
+    "merge_commit": "71dc8fb624ec17a975619c173194b1a8ac9ab1b6",
+    "browser_provider": "0.2.3",
+    "browser_firefox": "0.2.3",
+    "browser_mcp": "0.1.2",
+    "pi_browser": "0.2.2",
+    "companion_source": "0.2.6",
+    "native_wire_protocol": 2,
+    "browser_provider_protocol": 2
+  },
+  "source_candidate": {
+    "companion_version": "0.2.6",
+    "extension_id": "zamery-browser-firefox@zamery.local",
+    "source_sha256": "b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9",
+    "unsigned_amo_zip_sha256": "798e2e2d3dc6208cc343d06fc47d88cd09319d9a759970dc76085c6b362ba406",
+    "amo_lint": "0 errors / 0 warnings / 0 notices",
+    "signed_xpi": null
+  },
+  "verification": {
+    "pnpm_verify": "PASS",
+    "browser_firefox_tests": "232/232 PASS",
+    "browser_mcp_tests": "23/23 PASS",
+    "live_firefox_source_acceptance": "31/31 PASS on Firefox 157",
+    "overlay_raw_pixels": 1941,
+    "product_screenshot_overlay_pixels": 0,
+    "concurrent_action_screenshot_overlay_pixels": 0,
+    "amo_prepare": "PASS; candidate 0.2.6; source SHA-256 b1bc98035f49ccc3af55a9864bb9f5c7cf4c93cafc9525abb0579cc2bf5002b9",
+    "github_pr": 41,
+    "pending_evidence_pr": 42,
+    "github_ci_run_id": 37477883438,
+    "github_ci": "PASS"
+  },
+  "published_baseline": {
+    "root_release": "v0.2.3",
+    "browser_firefox": "0.2.2",
+    "companion": "0.2.5",
+    "companion_amo_version": "6547131",
+    "companion_amo_file": "5091270",
+    "companion_xpi_sha256": "8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c"
+  },
+  "remaining_release_gates": [
+    "Submit Companion 0.2.6 to AMO and obtain the exact Mozilla-signed listed XPI.",
+    "Record AMO version/file ids, signed XPI SHA-256, Mozilla signature and exact source tuple with pnpm release:tuple --xpi.",
+    "Install the signed 0.2.6 Companion and rerun doctor plus real-profile overlay/background-control acceptance.",
+    "Publish @zamery/browser-firefox@0.2.3 as part of stable v0.2.4 only after the signed Companion tuple is coherent.",
+    "Update stable-distribution-acceptance.yml to the v0.2.4 package tuple and signed 0.2.6 XPI URL/hash, then pass it.",
+    "Create GitHub stable release v0.2.4 only after signed-browser and clean-distribution gates pass."
+  ],
+  "blocker": {
+    "amo_api_key_present": false,
+    "amo_api_secret_present": false,
+    "reason": "The current Codex runtime does not receive Mozilla Developer Hub API credentials, and the available Firefox automation surface has no local-file upload action for AMO submission."
+  }
+}
