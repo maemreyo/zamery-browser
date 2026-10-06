@@ -11,7 +11,7 @@ Machine: a clean macOS VM (or a different Mac) with a fresh user. A second user 
 | `@zamery/browser-provider` | `0.2.2-rc.2` |
 | `@zamery/browser-firefox` | `0.2.1-rc.2` |
 | `@zamery/browser-mcp` | `0.1.0-rc.3` |
-| Signed XPI | **pending** — must be a Mozilla-signed `0.2.1` artifact matching the release tuple |
+| Signed XPI | **pending Mozilla review** — AMO version `6545949`; must become a Mozilla-signed `0.2.1` artifact matching the release tuple |
 | Companion | `0.2.1`, id `zamery-browser-firefox@zamery.local`, native wire 2 |
 | Release git SHA | `70835abbd3f1dfc5722062813a3d003066f1658a` |
 | macOS / arch | record: `sw_vers`, `uname -m` |

@@ -50,10 +50,12 @@
     "journal_schema": 2,
     "source_sha256": "0a063d41db772f1ce8bb6cfade9ac4c8de573851d4a997b1c409293b30d765af",
     "signed_xpi": null,
-    "signing_status": "BLOCKED_MISSING_AMO_API_CREDENTIALS"
+    "amo_version_id": 6545949,
+    "amo_version_url": "https://addons.mozilla.org/en-US/developers/addon/f82d5bdb37964220aafe/versions/6545949",
+    "signing_status": "SUBMITTED_PENDING_REVIEW"
   },
   "remaining_release_gates": [
-    "Load WEB_EXT_API_KEY and WEB_EXT_API_SECRET into the release environment and submit companion 0.2.1 to AMO for signing.",
+    "Wait for Mozilla review/signing of submitted AMO version 6545949 and download the signed 0.2.1 XPI.",
     "Record the signed 0.2.1 XPI SHA-256 in release:tuple and replace the pending XPI row in docs/clean-machine-acceptance.md.",
     "Run the clean-machine acceptance with the published pinned npm RCs and the signed XPI.",
     "Run the real already-authenticated Firefox-profile acceptance with the signed companion before claiming technical-preview GO."
