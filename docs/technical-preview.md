@@ -4,9 +4,9 @@ Date: 2026-10-06. Scope: macOS, local stdio MCP (Codex and other local MCP hosts
 
 ## Verdict
 
-**Stable `v0.2.2` accepted.** Stable npm artifacts for that accepted release are `@zamery/browser-provider@0.2.2`, `@zamery/browser-firefox@0.2.1`, `@zamery/browser-mcp@0.1.0`, and `@zamery/pi-browser@0.2.1`; companion `0.2.2` is Mozilla-signed and source-compatible with the accepted tree. Published-artifact installation passed on a clean GitHub-hosted macOS 26.6.2 arm64 runner (run `37417918059`) without a repository checkout. Signed real-profile attention/auth UX acceptance separately passed on Firefox 157. npm `latest` has since advanced to `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`; those package publications do not by themselves promote a new signed-browser stable release. Durable stable evidence: `docs/evidence/stable-release-2026-10-06.json`.
+**`v0.2.3` release candidate signed and public.** npm `latest` is `@zamery/browser-provider@0.2.3`, `@zamery/browser-firefox@0.2.2`, `@zamery/browser-mcp@0.1.1`, and `@zamery/pi-browser@0.2.2`; companion `0.2.5` is Mozilla-signed/public on AMO and source-compatible with the accepted candidate. The exact signed XPI/source tuple is verified. Final stable promotion is pending only the refreshed clean-distribution run and signed real-profile cooperative-background acceptance. The previously accepted stable `v0.2.2` evidence remains in `docs/evidence/stable-release-2026-10-06.json`.
 
-`main` contains post-`v0.2.2` release work. Companion `0.2.3` added the public icon/toolbar branding and was approved for the public AMO listing on 2026-10-06 (AMO version `6546568`). Companion source `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. Its exact signed-XPI digest/source tuple has not yet been recorded, so the stable claims in this document continue to refer to the exact `v0.2.2` tuple above. Current package/source-candidate evidence is recorded separately in `docs/evidence/v0.2.3-pending-signed-companion-2026-10-06.json`.
+Companion `0.2.5` includes the completed visible branding and the cooperative background-control fix: ordinary trusted human activity on a shared tab invalidates the old observation but does not force persistent user control when explicit background control is enabled. AMO version `6547131`, file `5091270`, XPI SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`; `pnpm release:tuple --xpi` verifies Mozilla signature presence and exact source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. Candidate evidence is in `docs/evidence/v0.2.3-signed-companion-2026-10-06.json`.
 
 ## What exists (by layer)
 
@@ -47,7 +47,7 @@ Legend: ✅ proven at the named layer · 🟡 partly proven · ❌ not proven (b
 | 12 | Typed/key/OTP/hidden canaries absent from journal/log/artifact metadata; legacy migration | ✅ | Host tests + live canary scan of the real journal, host log and artifact metadata. |
 | 13 | Cached replay after revoke denied | ✅ | Companion VM (same-id snapshot replay after revoke is the reproduced F02 probe, now prevented). |
 | 14 | Multi-client / profile isolation | 🟡 | Real host tests: audience isolation, per-profile journals, single-writer lock. Two simultaneous real Firefox profiles were not run. |
-| 15 | Signed XPI/source compatibility | ✅ | Signed companion `0.2.2`, AMO version `6546104`, file `5090243`, SHA-256 `56acdbe5c6db19ce3c4d7567c652996cd895bde0b74700e266aec3710dd50aa9`. `pnpm release:tuple --xpi` verified manifest `0.2.2`, Mozilla signature presence, and exact companion source SHA-256 `3ed571fe4f4af7400b7ceb1bd27d8e67278d59b23b3f15ba497b425671457bbf`. |
+| 15 | Signed XPI/source compatibility | ✅ | Signed companion `0.2.5`, AMO version `6547131`, file `5091270`, SHA-256 `8e89599e36fcec8d13c6da9d31cccf871626ce8b80d83e4345cd110eb8f8f59c`. `pnpm release:tuple --xpi` verified manifest `0.2.5`, Mozilla signature presence, and exact companion source SHA-256 `a0a2f4624bcd4c49966d8ce683023a5cd7fccea1a99ee78af3841435438e6012`. |
 | 16 | Mismatched protocol fails closed | ✅ | Host + companion VM + doctor tests; a protocol-1 companion with a protocol-2 host is rejected for every op but `status`. |
 
 ## Codex runs (real Codex CLI 0.160.0, MCP server over stdio)
@@ -79,7 +79,7 @@ Attention/auth UX accepted tuple: `@zamery/browser-provider@0.2.2-rc.3`, `@zamer
 
 ## Release gate
 
-The next stable promotion is still gated on the signed browser artifact. npm `latest` is already on the new package tuple and the source checks pass, but Companion `0.2.5` must still be submitted/approved by Mozilla, its exact signed XPI/source tuple must be recorded, the real-profile cooperative-background acceptance must pass on that signed build, and stable distribution acceptance must be rerun before creating a new stable GitHub release.
+The signed browser artifact gate is closed. Remaining gates are the signed real-profile cooperative-background acceptance on installed Companion `0.2.5` and a refreshed stable-distribution acceptance run using the exact published package/XPI tuple. After both pass, create the stable GitHub `v0.2.3` release and record the final evidence.
 
 ## Known limitations of the current release scope
 
