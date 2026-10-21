@@ -9,6 +9,10 @@
   <a href="https://github.com/maemreyo/zamery-browser/discussions"><img alt="GitHub Discussions" src="https://img.shields.io/badge/community-Discussions-6f42c1"></a>
 </p>
 
+<p align="center">
+  <a href="https://mcprush.com/to/zamery-browser-mcp?ref=badge"><img alt="Zamery Browser MCP server" src="https://mcprush.com/badge/zamery-browser-mcp/card.svg"></a>
+</p>
+
 Typed browser control for AI agents, built around explicit capabilities, semantic snapshots, and observable action outcomes.
 
 Zamery Browser lets an agent work with a browser through a provider-neutral contract instead of coupling the agent to one automation engine. The Firefox provider connects to the user's already-running Firefox rather than launching a disposable browser profile.
